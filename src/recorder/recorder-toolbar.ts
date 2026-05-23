@@ -56,6 +56,29 @@ function initRecorder() {
 async function startRecording(options: RecordingOptions): Promise<void> {
   rec.options = options;
 
+  // Request mic and webcam BEFORE the countdown and screen picker so that:
+  // 1. The user gesture from "Start Recording" is still live for getUserMedia
+  // 2. The webcam bubble can appear immediately once recording begins
+  // 3. Permission failures surface before we enter the countdown
+  if (options.mic) {
+    try {
+      rec.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch {
+      rec.micStream = null;
+    }
+  }
+
+  if (options.webcam) {
+    try {
+      rec.webcamStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 320, facingMode: 'user' },
+        audio: false,
+      });
+    } catch {
+      rec.webcamStream = null;
+    }
+  }
+
   await showCountdown(3);
 
   // Map the user's mode choice to Chrome's displaySurface hint so the picker
@@ -73,36 +96,22 @@ async function startRecording(options: RecordingOptions): Promise<void> {
         height: { ideal: screen.height },
         displaySurface,
       } as MediaTrackConstraints,
-      audio: true, // capture system/tab audio when the OS permits it
+      audio: true,
     });
   } catch {
-    // User cancelled the picker
+    // User cancelled — clean up any streams already acquired
+    rec.micStream?.getTracks().forEach((t) => t.stop());
+    rec.webcamStream?.getTracks().forEach((t) => t.stop());
+    rec.micStream = null;
+    rec.webcamStream = null;
     return;
   }
 
   rec.screenStream.getVideoTracks()[0]?.addEventListener('ended', () => stopRecording());
 
-  // Microphone captured separately so it's independent of screen-share audio.
-  // getDisplayMedia({ audio: true }) only gets system audio, not the mic.
-  if (options.mic) {
-    try {
-      rec.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    } catch {
-      rec.micStream = null;
-    }
-  }
-
-  // Webcam bubble (video only — audio comes from micStream above)
-  if (options.webcam) {
-    try {
-      rec.webcamStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 320, facingMode: 'user' },
-        audio: false,
-      });
-      injectWebcamBubble(rec.webcamStream);
-    } catch {
-      rec.webcamStream = null;
-    }
+  // Inject webcam bubble now that we have the screen stream and are about to record
+  if (rec.webcamStream) {
+    injectWebcamBubble(rec.webcamStream);
   }
 
   // MediaRecorder only records the first audio track it finds, so we must mix
