@@ -1,0 +1,48 @@
+.sm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: crosshair;
+}
+
+.sm-overlay--region {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.sm-overlay--element {
+  background: transparent;
+  pointer-events: none;
+}
+
+.sm-selection {
+  position: absolute;
+  border: 2px solid #7C3AED;
+  background: rgba(124, 58, 237, 0.12);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.sm-hint {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #7C3AED;
+  color: #fff;
+  font: 600 12px/1 'SF Mono', 'Fira Code', monospace;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+.sm-element-highlight {
+  position: absolute;
+  z-index: 2147483646;
+  border: 2px solid #7C3AED;
+  background: rgba(124, 58, 237, 0.15);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3);
+  pointer-events: none;
+  transition: all 0.08s ease;
+}

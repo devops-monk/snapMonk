@@ -1,0 +1,23 @@
+{
+  "name": "snapmonk",
+  "version": "1.0.0",
+  "description": "Capture. Annotate. Ship. — by DevOps-Monk",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "zip": "npm run build && cd dist && zip -r ../snapmonk.zip . && echo 'snapmonk.zip ready'"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/chrome": "^0.0.305",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.2.6",
+    "vite-plugin-web-extension": "^4.1.1"
+  },
+  "dependencies": {
+    "fabric": "^6.4.3",
+    "idb": "^8.0.1"
+  }
+}

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapMonk Settings</title>
+  <link rel="stylesheet" href="./options.css">
+</head>
+<body>
+<div class="container">
+
+  <div class="page-header">
+    <img src="../../icons/icon48.png" alt="SnapMonk">
+    <div>
+      <h1>SnapMonk Settings</h1>
+      <p>by DevOps-Monk — v1.0.0</p>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="general">General</button>
+    <button class="tab-btn" data-tab="shortcuts">Shortcuts</button>
+    <button class="tab-btn" data-tab="integrations">Integrations</button>
+    <button class="tab-btn" data-tab="ai">AI</button>
+    <button class="tab-btn" data-tab="library">My Captures</button>
+    <button class="tab-btn" data-tab="about">About</button>
+  </div>
+
+  <!-- General Tab -->
+  <div id="tab-general">
+    <div class="settings-group">
+      <div class="settings-group-title">Capture Defaults</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Default Format</label>
+          <span>Format used for quick download</span>
+        </div>
+        <select id="pref-format">
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+          <option value="webp">WebP</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>JPG Quality</label>
+          <span>Compression quality for JPG exports</span>
+        </div>
+        <select id="pref-jpg-quality">
+          <option value="0.92">High (92%)</option>
+          <option value="0.75">Medium (75%)</option>
+          <option value="0.6">Low (60%)</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Full Page Scroll Delay</label>
+          <span>Wait time between scrolls (ms) — increase for slow pages</span>
+        </div>
+        <select id="pref-scroll-delay">
+          <option value="150">150ms (fast)</option>
+          <option value="250" selected>250ms (default)</option>
+          <option value="500">500ms (slow pages)</option>
+          <option value="800">800ms (very slow)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Editor</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Show DevOps-Monk Watermark</label>
+          <span>Add "SnapMonk by DevOps-Monk" to exports</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="pref-watermark" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Open Editor After Capture</label>
+          <span>Automatically open the editor when a screenshot is taken</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="pref-open-editor" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group-title">Privacy</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>All Processing is 100% Local</label>
+          <span>SnapMonk never sends your screenshots to any server. All capture, annotation, and export happens in your browser.</span>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="#10B981" style="width:22px;height:22px;flex-shrink:0;">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shortcuts Tab -->
+  <div id="tab-shortcuts" style="display:none;">
+    <div class="settings-group">
+      <div class="settings-group-title">Keyboard Shortcuts</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Capture Visible Area</label>
+          <span>Screenshot of what's currently visible</span>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Alt+Shift+S</code>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Capture Full Page</label>
+          <span>Scroll and stitch entire page</span>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Alt+Shift+F</code>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Region Select</label>
+          <span>Drag to select any area</span>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Alt+Shift+R</code>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Editor: Undo</label>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Ctrl+Z</code>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Editor: Redo</label>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Ctrl+Y</code>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Editor: Delete Selected</label>
+        </div>
+        <code style="background:#21262D;padding:4px 10px;border-radius:6px;font-size:12px;color:#E6EDF3;">Delete / Backspace</code>
+      </div>
+    </div>
+    <p style="font-size:12px;color:#8B949E;margin-top:12px;">
+      To change extension keyboard shortcuts, visit <a href="chrome://extensions/shortcuts" style="color:#7C3AED;" onclick="return false;" id="link-shortcuts">chrome://extensions/shortcuts</a>
+    </p>
+  </div>
+
+  <!-- Integrations Tab -->
+  <div id="tab-integrations" style="display:none;">
+
+    <!-- GitHub -->
+    <div class="settings-group">
+      <div class="settings-group-title">🐙 GitHub</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Personal Access Token</label>
+          <span>Needs <code>repo</code> scope to upload screenshots and post comments</span>
+        </div>
+        <input type="password" id="int-github-token" class="int-input" placeholder="ghp_…" autocomplete="off">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Default Repository</label>
+          <span>Pre-fills the repo field in the Share panel (owner/repo)</span>
+        </div>
+        <input type="text" id="int-github-repo" class="int-input" placeholder="myorg/myrepo">
+      </div>
+      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
+        <span id="int-github-status" class="int-status"></span>
+        <button id="int-github-validate" class="int-validate-btn">Validate Token</button>
+      </div>
+    </div>
+
+    <!-- Jira -->
+    <div class="settings-group">
+      <div class="settings-group-title">🔵 Jira</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Jira Instance URL</label>
+          <span>Your Jira Cloud URL, e.g. https://mycompany.atlassian.net</span>
+        </div>
+        <input type="url" id="int-jira-url" class="int-input" placeholder="https://mycompany.atlassian.net">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Atlassian Account Email</label>
+          <span>The email address you use to log into Jira</span>
+        </div>
+        <input type="email" id="int-jira-email" class="int-input" placeholder="you@company.com">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>API Token</label>
+          <span>Generate at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" style="color:#7C3AED;">id.atlassian.com</a></span>
+        </div>
+        <input type="password" id="int-jira-token" class="int-input" placeholder="ATATT…" autocomplete="off">
+      </div>
+      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
+        <span id="int-jira-status" class="int-status"></span>
+        <button id="int-jira-validate" class="int-validate-btn">Validate Credentials</button>
+      </div>
+    </div>
+
+    <!-- Slack -->
+    <div class="settings-group">
+      <div class="settings-group-title">💬 Slack</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Bot Token</label>
+          <span>OAuth token starting with <code>xoxb-</code>. Needs <code>files:write</code> and <code>channels:read</code> scopes.</span>
+        </div>
+        <input type="password" id="int-slack-token" class="int-input" placeholder="xoxb-…" autocomplete="off">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Default Channel</label>
+          <span>Pre-fills the channel field in the Share panel (e.g. #bugs)</span>
+        </div>
+        <input type="text" id="int-slack-channel" class="int-input" placeholder="#bugs">
+      </div>
+      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
+        <span id="int-slack-status" class="int-status"></span>
+        <button id="int-slack-validate" class="int-validate-btn">Validate Token</button>
+      </div>
+    </div>
+
+    <div class="settings-group" style="background:none;border:none;padding:0;">
+      <button id="int-save-all" style="width:100%;padding:10px;background:#7C3AED;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">
+        Save All Integration Settings
+      </button>
+      <p id="int-save-feedback" style="text-align:center;font-size:12px;margin-top:8px;min-height:18px;color:#10B981;"></p>
+    </div>
+
+  </div>
+
+  <!-- AI Tab -->
+  <div id="tab-ai" style="display:none;">
+
+    <div class="settings-group">
+      <div class="settings-group-title">AI Provider</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Select Provider</label>
+          <span>Choose which AI analyses your screenshots to generate bug reports</span>
+        </div>
+        <select id="ai-provider">
+          <option value="gemini">Gemini Flash 2.0 (Free tier)</option>
+          <option value="groq">Groq LLaMA 4 (Free tier)</option>
+          <option value="openai">GPT-4o-mini (Paid)</option>
+          <option value="ollama">Ollama (Local — Free)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Gemini settings -->
+    <div class="settings-group ai-provider-section" id="ai-section-gemini">
+      <div class="settings-group-title">🟦 Google Gemini</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>API Key</label>
+          <span>Free tier: 1,500 req/day, 1M tokens/day. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#7C3AED;">aistudio.google.com</a></span>
+        </div>
+        <input type="password" id="ai-gemini-key" class="int-input" placeholder="AIza…" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- Groq settings -->
+    <div class="settings-group ai-provider-section" id="ai-section-groq" style="display:none;">
+      <div class="settings-group-title">🟥 Groq</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>API Key</label>
+          <span>Free tier: 14,400 req/day with LLaMA 4 vision. Get one at <a href="https://console.groq.com/keys" target="_blank" style="color:#7C3AED;">console.groq.com</a></span>
+        </div>
+        <input type="password" id="ai-groq-key" class="int-input" placeholder="gsk_…" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- OpenAI settings -->
+    <div class="settings-group ai-provider-section" id="ai-section-openai" style="display:none;">
+      <div class="settings-group-title">🟩 OpenAI</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>API Key</label>
+          <span>GPT-4o-mini with vision. ~$0.003 per screenshot analysis. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#7C3AED;">platform.openai.com</a></span>
+        </div>
+        <input type="password" id="ai-openai-key" class="int-input" placeholder="sk-…" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- Ollama settings -->
+    <div class="settings-group ai-provider-section" id="ai-section-ollama" style="display:none;">
+      <div class="settings-group-title">🟣 Ollama (Local)</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Ollama URL</label>
+          <span>URL where Ollama is running. Default: http://localhost:11434</span>
+        </div>
+        <input type="url" id="ai-ollama-url" class="int-input" placeholder="http://localhost:11434">
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Vision Model</label>
+          <span>A vision-capable model you've pulled. E.g. <code>llava</code>, <code>llava:13b</code>, <code>bakllava</code></span>
+        </div>
+        <input type="text" id="ai-ollama-model" class="int-input" placeholder="llava">
+      </div>
+    </div>
+
+    <div class="settings-group" style="background:none;border:none;padding:0;">
+      <button id="ai-save" style="width:100%;padding:10px;background:linear-gradient(135deg,#7C3AED,#4285F4);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">
+        Save AI Settings
+      </button>
+      <p id="ai-save-feedback" style="text-align:center;font-size:12px;margin-top:8px;min-height:18px;color:#10B981;"></p>
+    </div>
+
+  </div>
+
+  <!-- Library Tab -->
+  <div id="tab-library" style="display:none;">
+    <div style="display:flex;align-items:center;margin-bottom:20px;gap:12px;">
+      <h2 style="font-size:16px;font-weight:600;flex:1;">My Captures</h2>
+      <button id="btn-clear-all" style="padding:6px 14px;background:#21262D;border:1px solid #30363D;border-radius:8px;color:#F85149;font-size:12px;cursor:pointer;">Clear All</button>
+    </div>
+    <div id="library-grid">
+      <div class="empty-state" id="library-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>
+        <p>No captures yet.</p>
+        <p style="margin-top:4px;font-size:12px;">Take a screenshot using the extension icon or keyboard shortcuts.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Tab -->
+  <div id="tab-about" style="display:none;">
+    <div class="settings-group">
+      <div class="settings-group-title">About SnapMonk</div>
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+        <p style="font-size:14px;line-height:1.6;color:#8B949E;">
+          <strong style="color:#E6EDF3;">SnapMonk</strong> is a professional screenshot and annotation tool built for developers, DevOps engineers, and technical teams. Capture, annotate, and share in seconds.
+        </p>
+        <p style="font-size:13px;color:#8B949E;">
+          Built with ❤️ by <a href="https://devops-monk.com" target="_blank" style="color:#7C3AED;">DevOps-Monk</a>
+        </p>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">Tech Stack</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Chrome Extension</label>
+          <span>Manifest V3 — modern, privacy-focused, efficient</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Canvas Engine</label>
+          <span>Fabric.js v6 — professional annotation canvas</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Build Tooling</label>
+          <span>Vite 6 + TypeScript 5 + Tailwind CSS v4</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Storage</label>
+          <span>IndexedDB — all data stays in your browser</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script type="module" src="./options.ts"></script>
+</body>
+</html>

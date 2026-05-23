@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SnapMonk Icon Generator</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0D1117; color: #E6EDF3; padding: 32px; }
+    h1 { color: #fff; margin-bottom: 8px; }
+    p { color: #8B949E; margin-bottom: 24px; }
+    .icons { display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 32px; }
+    .icon-wrap { text-align: center; }
+    .icon-wrap span { display: block; font-size: 11px; color: #8B949E; margin-top: 8px; }
+    button {
+      padding: 10px 24px; background: #7C3AED; border: none;
+      color: #fff; border-radius: 8px; font-size: 14px; cursor: pointer;
+    }
+    button:hover { background: #6D28D9; }
+  </style>
+</head>
+<body>
+  <h1>🐒 SnapMonk — Icon Generator</h1>
+  <p>Open this file in your browser. Icons will be previewed below. Click "Download All Icons" to save them to the <code>public/icons/</code> folder.</p>
+  <div class="icons" id="preview"></div>
+  <button onclick="downloadAll()">Download All Icons</button>
+
+  <script>
+    const sizes = [16, 32, 48, 128];
+
+    function drawIcon(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const r = size * 0.18; // corner radius
+
+      // Background gradient
+      const grad = ctx.createLinearGradient(0, 0, size, size);
+      grad.addColorStop(0, '#7C3AED');
+      grad.addColorStop(1, '#5B21B6');
+
+      // Rounded rect
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      if (size <= 16) {
+        // Simple "S" for tiny icon
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${size * 0.72}px -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('S', size / 2, size / 2 + size * 0.04);
+      } else {
+        // Camera body
+        const pad = size * 0.18;
+        const camW = size - pad * 2;
+        const camH = camW * 0.65;
+        const camX = pad;
+        const camY = (size - camH) / 2 + size * 0.04;
+        const camR = size * 0.08;
+
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath();
+        ctx.moveTo(camX + camR, camY);
+        ctx.lineTo(camX + camW - camR, camY);
+        ctx.quadraticCurveTo(camX + camW, camY, camX + camW, camY + camR);
+        ctx.lineTo(camX + camW, camY + camH - camR);
+        ctx.quadraticCurveTo(camX + camW, camY + camH, camX + camW - camR, camY + camH);
+        ctx.lineTo(camX + camR, camY + camH);
+        ctx.quadraticCurveTo(camX, camY + camH, camX, camY + camH - camR);
+        ctx.lineTo(camX, camY + camR);
+        ctx.quadraticCurveTo(camX, camY, camX + camR, camY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Viewfinder bump
+        const bumpW = camW * 0.28;
+        const bumpH = size * 0.08;
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.roundRect(camX + camW * 0.36, camY - bumpH * 0.8, bumpW, bumpH, bumpH * 0.4);
+        ctx.fill();
+
+        // Lens circle
+        const cx = camX + camW / 2;
+        const cy = camY + camH / 2;
+        const lr = camH * 0.3;
+
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, lr, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = size * 0.04;
+        ctx.beginPath();
+        ctx.arc(cx, cy, lr * 0.65, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Flash dot
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(camX + camW * 0.2, camY + camH * 0.28, size * 0.03, 0, Math.PI * 2);
+        ctx.fill();
+
+        // "SM" text at bottom
+        if (size >= 48) {
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.font = `bold ${size * 0.14}px -apple-system, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('SNAPMONK', size / 2, camY + camH + size * 0.1);
+        }
+      }
+
+      return canvas;
+    }
+
+    // Preview
+    const preview = document.getElementById('preview');
+    sizes.forEach(size => {
+      const canvas = drawIcon(size);
+      const wrap = document.createElement('div');
+      wrap.className = 'icon-wrap';
+      wrap.appendChild(canvas);
+      const label = document.createElement('span');
+      label.textContent = `${size}×${size}`;
+      wrap.appendChild(label);
+      preview.appendChild(wrap);
+    });
+
+    function downloadAll() {
+      sizes.forEach(size => {
+        const canvas = drawIcon(size);
+        const a = document.createElement('a');
+        a.download = `icon${size}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      });
+    }
+  </script>
+</body>
+</html>

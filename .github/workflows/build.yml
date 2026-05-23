@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapmonk-dist-${{ github.sha }}
+          path: dist/
+          retention-days: 30
+
+      - name: Create zip for Chrome Web Store
+        run: |
+          cd dist
+          zip -r ../snapmonk.zip .
+          cd ..
+          echo "Zip size: $(du -sh snapmonk.zip | cut -f1)"
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapmonk-${{ github.sha }}.zip
+          path: snapmonk.zip
+          retention-days: 30
+
+      # On a published GitHub Release, attach the zip to the release assets
+      - name: Attach zip to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: snapmonk.zip

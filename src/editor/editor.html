@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapMonk Editor</title>
+  <link rel="stylesheet" href="./editor.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Top Bar ──────────────────────────────────────────────── -->
+  <header id="topbar">
+    <div class="logo">
+      <img src="../../icons/icon32.png" alt="SnapMonk">
+      <div>
+        <div>SnapMonk</div>
+        <div class="brand">by DevOps-Monk</div>
+      </div>
+    </div>
+
+    <button class="topbar-btn" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
+      Undo
+    </button>
+    <button class="topbar-btn" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3"/></svg>
+      Redo
+    </button>
+
+    <input type="text" id="filename-input" value="snapmonk-capture" title="Click to rename">
+
+    <div class="zoom-control">
+      <button id="btn-zoom-out" title="Zoom out">−</button>
+      <span id="zoom-label">100%</span>
+      <button id="btn-zoom-in" title="Zoom in">+</button>
+      <button id="btn-zoom-fit" class="topbar-btn" style="padding:4px 8px;font-size:11px;" title="Fit to screen">Fit</button>
+    </div>
+  </header>
+
+  <!-- ── Tools Panel ───────────────────────────────────────────── -->
+  <aside id="tools">
+    <div class="tools-section">Select & Draw</div>
+    <div class="tool-grid">
+      <button class="tool-btn active" data-tool="select" title="Select / Move (V)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672Z"/></svg>
+        Select
+      </button>
+      <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg>
+        Arrow
+      </button>
+      <button class="tool-btn" data-tool="rect" title="Rectangle (R)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"/></svg>
+        Rect
+      </button>
+      <button class="tool-btn" data-tool="circle" title="Circle (C)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+        Circle
+      </button>
+      <button class="tool-btn" data-tool="text" title="Text (T)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/></svg>
+        Text
+      </button>
+      <button class="tool-btn" data-tool="pen" title="Freehand Pen (P)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
+        Pen
+      </button>
+    </div>
+
+    <div class="tools-section" style="margin-top:8px;">Highlight & Blur</div>
+    <div class="tool-grid">
+      <button class="tool-btn" data-tool="highlight" title="Highlight (H)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42"/></svg>
+        Highlight
+      </button>
+      <button class="tool-btn" data-tool="blur" title="Blur / Redact (B)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+        Blur
+      </button>
+      <button class="tool-btn" data-tool="step" title="Step Number (S)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+        Step #
+      </button>
+      <button class="tool-btn" data-tool="crop" title="Crop (X)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+        Crop
+      </button>
+    </div>
+
+    <div class="tools-divider"></div>
+
+    <!-- Color -->
+    <div class="color-section">
+      <div class="tools-section" style="padding:0 0 4px;">Color</div>
+      <div class="color-swatches" id="color-swatches">
+        <div class="swatch active" data-color="#F85149" style="background:#F85149;" title="Red"></div>
+        <div class="swatch" data-color="#FF9800" style="background:#FF9800;" title="Orange"></div>
+        <div class="swatch" data-color="#FFD700" style="background:#FFD700;" title="Yellow"></div>
+        <div class="swatch" data-color="#10B981" style="background:#10B981;" title="Green"></div>
+        <div class="swatch" data-color="#3B82F6" style="background:#3B82F6;" title="Blue"></div>
+        <div class="swatch" data-color="#7C3AED" style="background:#7C3AED;" title="Purple"></div>
+        <div class="swatch" data-color="#E6EDF3" style="background:#E6EDF3;" title="White"></div>
+        <div class="swatch" data-color="#0D1117" style="background:#0D1117;border:1px solid #484F58;" title="Black"></div>
+      </div>
+    </div>
+
+    <!-- Stroke width -->
+    <div class="stroke-section">
+      <label>
+        <span>Stroke</span>
+        <span id="stroke-val">3px</span>
+      </label>
+      <input type="range" id="stroke-slider" min="1" max="16" value="3" step="1">
+    </div>
+
+    <!-- Font size (shown only for text tool) -->
+    <div class="fontsize-section" id="fontsize-section" style="display:none;">
+      <label>
+        <span>Font Size</span>
+        <span id="fontsize-val">20px</span>
+      </label>
+      <input type="range" id="fontsize-slider" min="10" max="72" value="20" step="2">
+    </div>
+
+    <!-- Delete selected -->
+    <div style="padding:12px 10px 0;">
+      <button class="tool-btn" id="btn-delete" style="width:100%;flex-direction:row;gap:6px;justify-content:center;color:#F85149;" title="Delete selected (Del)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" style="width:15px;height:15px;"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+        Delete Selected
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Canvas Area ────────────────────────────────────────────── -->
+  <main id="canvas-wrap">
+    <div id="canvas-container">
+      <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loading-text">Loading capture…</p>
+      </div>
+      <canvas id="editor-canvas"></canvas>
+    </div>
+  </main>
+
+  <!-- ── Export Bar ─────────────────────────────────────────────── -->
+  <footer id="exportbar">
+    <button class="export-btn primary" id="btn-copy">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/></svg>
+      Copy PNG
+    </button>
+    <button class="export-btn secondary" id="btn-download-png">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+      Download PNG
+    </button>
+    <button class="export-btn secondary" id="btn-download-jpg">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+      Download JPG
+    </button>
+    <button class="export-btn secondary" id="btn-download-pdf">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+      PDF
+    </button>
+
+    <button class="export-btn ai" id="btn-ai-report">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>
+      AI Bug Report
+    </button>
+    <button class="export-btn secondary" id="btn-share">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"/></svg>
+      Share
+    </button>
+
+    <div class="export-divider"></div>
+
+    <div class="watermark-badge">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 1-6.23-.693L5 14.5m14.8.8 1.402 1.402c1 1 .03 2.703-1.352 2.703a1.536 1.536 0 0 1-1.099-.454l-3.9-3.9m0 0-3.9 3.9m3.9-3.9L9.26 14.5"/></svg>
+      SnapMonk by DevOps-Monk
+    </div>
+  </footer>
+
+</div>
+<script type="module" src="./editor.ts"></script>
+</body>
+</html>
