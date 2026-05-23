@@ -5,8 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  release:
-    types: [published]
+
+permissions:
+  contents: write   # needed to create/update releases
 
 jobs:
   build:
@@ -29,30 +30,47 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: snapmonk-dist-${{ github.sha }}
-          path: dist/
-          retention-days: 30
-
-      - name: Create zip for Chrome Web Store
+      - name: Create zip
         run: |
-          cd dist
-          zip -r ../snapmonk.zip .
-          cd ..
-          echo "Zip size: $(du -sh snapmonk.zip | cut -f1)"
+          cd dist && zip -r ../snapmonk.zip . && cd ..
+          echo "ZIP_SIZE=$(du -sh snapmonk.zip | cut -f1)" >> $GITHUB_ENV
 
-      - name: Upload zip artifact
+      - name: Summary
+        run: |
+          echo "### Build complete" >> $GITHUB_STEP_SUMMARY
+          echo "Zip size: **${{ env.ZIP_SIZE }}**" >> $GITHUB_STEP_SUMMARY
+
+      # PRs: just upload as artifact so reviewers can test
+      - name: Upload zip artifact (PRs)
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: snapmonk-${{ github.sha }}.zip
+          name: snapmonk-pr${{ github.event.pull_request.number }}.zip
           path: snapmonk.zip
-          retention-days: 30
+          retention-days: 14
 
-      # On a published GitHub Release, attach the zip to the release assets
-      - name: Attach zip to GitHub Release
-        if: github.event_name == 'release'
+      # Main branch: update the rolling "latest" release so there's always
+      # a direct download link at github.com/devops-monk/snapMonk/releases/latest
+      - name: Publish rolling "latest" release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: "Latest build"
+          body: |
+            Automated build from the latest commit on `main`.
+
+            **How to install in Chrome:**
+            1. Download `snapmonk.zip` below
+            2. Unzip it anywhere on your machine
+            3. Open `chrome://extensions`
+            4. Enable **Developer Mode** (top-right toggle)
+            5. Click **Load unpacked** → select the unzipped folder
+            6. Pin SnapMonk from the 🧩 toolbar menu
+
+            > To update: repeat steps 1-5 (click the ↺ refresh icon on the card instead of Load unpacked if already installed).
+
+            _Commit: ${{ github.sha }}_
+          prerelease: true
+          make_latest: true
           files: snapmonk.zip
