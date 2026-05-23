@@ -7,9 +7,6 @@ import {
   Textbox,
   FabricText,
   Path,
-  Group,
-  Line,
-  Triangle,
   Point,
   type TPointerEvent,
 } from 'fabric';
@@ -363,38 +360,32 @@ async function onMouseUp(opt: { e: TPointerEvent }) {
 
 // ─── Shape Factories ──────────────────────────────────────────────────────────
 
-function makeArrow(x1: number, y1: number, x2: number, y2: number): Group {
+function makeArrow(x1: number, y1: number, x2: number, y2: number): Path {
   const dx = x2 - x1, dy = y2 - y1;
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
   const len = Math.sqrt(dx * dx + dy * dy);
-  const headSize = Math.max(12, state.strokeWidth * 4);
+  if (len < 2) return new Path('', { selectable: false });
 
-  const shaft = new Line([0, 0, len - headSize * 0.7, 0], {
+  const angle = Math.atan2(dy, dx);
+  const headLen = Math.max(14, state.strokeWidth * 4.5);
+  const headAngle = 0.42; // ~24 degrees
+
+  const tx = x2, ty = y2;
+  const wx1 = tx - headLen * Math.cos(angle - headAngle);
+  const wy1 = ty - headLen * Math.sin(angle - headAngle);
+  const wx2 = tx - headLen * Math.cos(angle + headAngle);
+  const wy2 = ty - headLen * Math.sin(angle + headAngle);
+
+  const d = `M ${x1} ${y1} L ${tx} ${ty} M ${wx1} ${wy1} L ${tx} ${ty} L ${wx2} ${wy2}`;
+
+  return new Path(d, {
     stroke: state.color,
     strokeWidth: state.strokeWidth,
+    fill: 'transparent',
     strokeLineCap: 'round',
+    strokeLineJoin: 'round',
     selectable: false,
+    objectCaching: false,
   });
-
-  const head = new Triangle({
-    width: headSize,
-    height: headSize,
-    fill: state.color,
-    left: len - headSize,
-    top: -headSize / 2,
-    selectable: false,
-    angle: 90,
-  });
-
-  const group = new Group([shaft, head], {
-    left: x1,
-    top: y1,
-    angle,
-    originX: 'left',
-    originY: 'center',
-    selectable: false,
-  });
-  return group;
 }
 
 function makeRect(x: number, y: number, w: number, h: number): Rect {
