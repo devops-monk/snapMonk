@@ -185,6 +185,11 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   });
   await sleep(250);
 
+  // Read once before the loop. Chrome enforces ~2 captureVisibleTab calls/sec,
+  // so we floor at 600ms to stay safely under the quota.
+  const { pref_scroll_delay } = await chrome.storage.sync.get({ pref_scroll_delay: '600' });
+  const scrollDelay = Math.max(600, parseInt(pref_scroll_delay as string, 10) || 600);
+
   const sliceBlobs: Blob[] = [];
   const sliceMeta: SliceMeta[] = [];
   let requestedY = 0;
@@ -197,9 +202,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
       func: (y: number) => { window.scrollTo(0, y); },
       args: [actualY],
     });
-    // Wait for page to repaint after scroll. Read user's preference or default to 300ms.
-    const { pref_scroll_delay } = await chrome.storage.sync.get({ pref_scroll_delay: '300' });
-    await sleep(parseInt(pref_scroll_delay as string, 10) || 300);
+    await sleep(scrollDelay);
 
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
     sliceBlobs.push(await dataUrlToBlob(dataUrl));
