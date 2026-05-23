@@ -181,17 +181,24 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  const mimeType = getSupportedMimeType();
-  const webmBlob = new Blob(rec.chunks, { type: mimeType });
   const format = rec.options?.format ?? 'webm';
+  const mimeType = getSupportedMimeType(format === 'mp4');
+  const blob = new Blob(rec.chunks, { type: mimeType });
 
   releaseStreams();
   resetRecState();
 
   if (format === 'mp4') {
-    await convertAndDownloadMp4(webmBlob);
+    if (mimeType.startsWith('video/mp4')) {
+      // Recorded natively as MP4 — download directly, no conversion needed.
+      triggerDownload(blob, `snapmonk-recording-${formatTimestamp()}.mp4`);
+      notifyBackground('recordingStopped');
+    } else {
+      // Recorded as WebM (H.264) — remux to MP4 container via ffmpeg.
+      await convertAndDownloadMp4(blob);
+    }
   } else {
-    triggerDownload(webmBlob, `snapmonk-recording-${formatTimestamp()}.webm`);
+    triggerDownload(blob, `snapmonk-recording-${formatTimestamp()}.webm`);
     notifyBackground('recordingStopped');
   }
 }
@@ -480,23 +487,27 @@ function removeOverlays() {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function getSupportedMimeType(preferH264 = false): string {
-  // When targeting MP4, prefer H.264 so ffmpeg can remux (container-swap)
-  // instead of re-encoding — making conversion near-instant.
-  const h264Types = [
-    'video/webm;codecs=h264,opus',
-    'video/webm;codecs=avc1,opus',
-  ];
-  const defaultTypes = [
+function getSupportedMimeType(forMp4 = false): string {
+  if (forMp4) {
+    // Chrome 130+ can record natively to MP4 — no conversion needed at all.
+    // Fall back to H.264-in-WebM so ffmpeg only has to remux (not re-encode).
+    const mp4Candidates = [
+      'video/mp4;codecs=avc1,mp4a.40.2',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=h264,opus',
+      'video/webm;codecs=avc1,opus',
+    ];
+    const found = mp4Candidates.find((t) => MediaRecorder.isTypeSupported(t));
+    if (found) return found;
+  }
+  const defaults = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm;codecs=h264,opus',
     'video/webm',
   ];
-  const candidates = preferH264
-    ? [...h264Types, ...defaultTypes]
-    : defaultTypes;
-  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+  return defaults.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 }
 
 function formatTimestamp(): string {
