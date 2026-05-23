@@ -1,4 +1,4 @@
-import type { PopupMessage, RecordingOptions, RecorderMessage } from '../utils/types';
+import type { PopupMessage, RecordingOptions, RecorderMessage, RecordingFormat } from '../utils/types';
 
 // ─── Tab switching ────────────────────────────────────────────────────────────
 
@@ -91,11 +91,21 @@ async function initRecordingUI() {
 // ─── Mode selector ────────────────────────────────────────────────────────────
 
 let selectedMode: RecordingOptions['mode'] = 'tab';
+let selectedFormat: RecordingFormat = 'webm';
 
 document.querySelectorAll<HTMLButtonElement>('.mode-card').forEach((btn) => {
   btn.addEventListener('click', () => {
     selectedMode = btn.dataset['mode'] as RecordingOptions['mode'];
     document.querySelectorAll<HTMLButtonElement>('.mode-card').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+  });
+});
+
+document.querySelectorAll<HTMLButtonElement>('.fmt-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    selectedFormat = btn.dataset['format'] as RecordingFormat;
+    document.querySelectorAll<HTMLButtonElement>('.fmt-btn').forEach((b) => {
       b.classList.toggle('active', b === btn);
     });
   });
@@ -122,7 +132,7 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
     mode: selectedMode,
     webcam: (document.getElementById('opt-webcam') as HTMLInputElement).checked,
     mic: (document.getElementById('opt-mic') as HTMLInputElement).checked,
-    format: 'webm',
+    format: selectedFormat,
   };
 
   await chrome.storage.local.set({

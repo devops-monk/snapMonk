@@ -68,7 +68,7 @@ export type BackgroundMessage = RegionSelectedMessage | ElementSelectedMessage;
 // ─── Recording ───────────────────────────────────────────────────────────────
 
 export type RecordingMode = 'tab' | 'desktop' | 'window';
-export type RecordingFormat = 'webm' | 'gif';
+export type RecordingFormat = 'webm' | 'mp4';
 
 export interface RecordingOptions {
   mode: RecordingMode;

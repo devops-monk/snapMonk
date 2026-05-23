@@ -1,3 +1,5 @@
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import type { RecorderMessage, RecordingOptions } from '../utils/types';
 
 // Guard: only inject once
@@ -178,13 +180,47 @@ function notifyBackground(action: string) {
   chrome.runtime.sendMessage({ action }).catch(() => {});
 }
 
-function finalizeRecording() {
-  const ext = rec.options?.format === 'gif' ? 'webm' : 'webm';
+async function finalizeRecording() {
   const mimeType = getSupportedMimeType();
-  const blob = new Blob(rec.chunks, { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const filename = `snapmonk-recording-${formatTimestamp()}.${ext}`;
+  const webmBlob = new Blob(rec.chunks, { type: mimeType });
+  const format = rec.options?.format ?? 'webm';
 
+  releaseStreams();
+  resetRecState();
+
+  if (format === 'mp4') {
+    await convertAndDownloadMp4(webmBlob);
+  } else {
+    triggerDownload(webmBlob, `snapmonk-recording-${formatTimestamp()}.webm`);
+    notifyBackground('recordingStopped');
+  }
+}
+
+async function convertAndDownloadMp4(webmBlob: Blob) {
+  const overlay = showConvertingOverlay();
+  try {
+    const ffmpeg = new FFmpeg();
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    });
+    await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
+    await ffmpeg.exec(['-i', 'input.webm', '-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-movflags', '+faststart', 'output.mp4']);
+    const data = await ffmpeg.readFile('output.mp4') as Uint8Array;
+    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+    triggerDownload(mp4Blob, `snapmonk-recording-${formatTimestamp()}.mp4`);
+  } catch (err) {
+    console.error('[SnapMonk] MP4 conversion failed, saving as WebM:', err);
+    triggerDownload(webmBlob, `snapmonk-recording-${formatTimestamp()}.webm`);
+  } finally {
+    overlay.remove();
+    notifyBackground('recordingStopped');
+  }
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -192,11 +228,31 @@ function finalizeRecording() {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
 
-  releaseStreams();
-  notifyBackground('recordingStopped');
+function showConvertingOverlay(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.id = 'sm-converting';
+  Object.assign(el.style, {
+    position: 'fixed', inset: '0', zIndex: '2147483647',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(0,0,0,0.75)', color: '#fff',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSize: '16px', gap: '12px',
+  });
+  el.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="animation:sm-spin 1s linear infinite">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
+    </svg>
+    <span>Converting to MP4…</span>
+    <span style="font-size:12px;opacity:0.6;">This may take a moment</span>
+    <style>@keyframes sm-spin{to{transform:rotate(360deg)}}</style>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
 
-  // Reset state
+function resetRecState() {
   rec.mediaRecorder = null;
   rec.screenStream = null;
   rec.webcamStream = null;

@@ -17,6 +17,8 @@
     "vite-plugin-web-extension": "^4.1.1"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "fabric": "^6.4.3",
     "idb": "^8.0.1"
   }
