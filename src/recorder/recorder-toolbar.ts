@@ -13,6 +13,7 @@ interface RecorderState {
   screenStream: MediaStream | null;
   webcamStream: MediaStream | null;
   micStream: MediaStream | null;
+  audioCtx: AudioContext | null;
   chunks: Blob[];
   startTime: number;
   timerInterval: ReturnType<typeof setInterval> | null;
@@ -25,6 +26,7 @@ const rec: RecorderState = {
   screenStream: null,
   webcamStream: null,
   micStream: null,
+  audioCtx: null,
   chunks: [],
   startTime: 0,
   timerInterval: null,
@@ -103,11 +105,23 @@ async function startRecording(options: RecordingOptions): Promise<void> {
     }
   }
 
-  // Combine: screen video + system audio + microphone audio
+  // MediaRecorder only records the first audio track it finds, so we must mix
+  // all audio sources (system + mic) into a single track via AudioContext.
+  rec.audioCtx = new AudioContext();
+  const mixDest = rec.audioCtx.createMediaStreamDestination();
+
+  for (const track of rec.screenStream.getAudioTracks()) {
+    rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+  }
+  if (rec.micStream) {
+    for (const track of rec.micStream.getAudioTracks()) {
+      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+    }
+  }
+
   const combinedStream = new MediaStream([
     ...rec.screenStream.getVideoTracks(),
-    ...rec.screenStream.getAudioTracks(),
-    ...(rec.micStream?.getAudioTracks() ?? []),
+    ...mixDest.stream.getAudioTracks(),
   ]);
 
   const mimeType = getSupportedMimeType();
@@ -141,6 +155,7 @@ function stopRecording() {
   rec.screenStream?.getTracks().forEach((t) => t.stop());
   rec.webcamStream?.getTracks().forEach((t) => t.stop());
   rec.micStream?.getTracks().forEach((t) => t.stop());
+  rec.audioCtx?.close();
 }
 
 function notifyBackground(action: string) {
@@ -169,6 +184,7 @@ function finalizeRecording() {
   rec.screenStream = null;
   rec.webcamStream = null;
   rec.micStream = null;
+  rec.audioCtx = null;
   rec.chunks = [];
 }
 
