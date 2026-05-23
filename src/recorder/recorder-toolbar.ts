@@ -135,7 +135,7 @@ async function startRecording(options: RecordingOptions): Promise<void> {
     ...mixDest.stream.getAudioTracks(),
   ]);
 
-  const mimeType = getSupportedMimeType();
+  const mimeType = getSupportedMimeType(options.format === 'mp4');
   rec.chunks = [];
   rec.mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
   rec.mediaRecorder.ondataavailable = (e) => {
@@ -206,7 +206,9 @@ async function convertAndDownloadMp4(webmBlob: Blob) {
       wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
     });
     await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
-    await ffmpeg.exec(['-i', 'input.webm', '-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-movflags', '+faststart', 'output.mp4']);
+    // -c copy remuxes without re-encoding (fast). Works when source is H.264,
+    // which is what getSupportedMimeType picks when MP4 is the target format.
+    await ffmpeg.exec(['-i', 'input.webm', '-c', 'copy', '-movflags', '+faststart', 'output.mp4']);
     const data = await ffmpeg.readFile('output.mp4') as Uint8Array;
     const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
     triggerDownload(mp4Blob, `snapmonk-recording-${formatTimestamp()}.mp4`);
@@ -478,14 +480,23 @@ function removeOverlays() {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function getSupportedMimeType(): string {
-  const types = [
+function getSupportedMimeType(preferH264 = false): string {
+  // When targeting MP4, prefer H.264 so ffmpeg can remux (container-swap)
+  // instead of re-encoding — making conversion near-instant.
+  const h264Types = [
+    'video/webm;codecs=h264,opus',
+    'video/webm;codecs=avc1,opus',
+  ];
+  const defaultTypes = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm;codecs=h264,opus',
     'video/webm',
   ];
-  return types.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+  const candidates = preferH264
+    ? [...h264Types, ...defaultTypes]
+    : defaultTypes;
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 }
 
 function formatTimestamp(): string {
