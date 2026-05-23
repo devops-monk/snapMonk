@@ -175,6 +175,9 @@ document.getElementById('btn-record-stop')?.addEventListener('click', async () =
   if (!state?.tabId) return;
 
   try {
+    // Bring the recording tab to the foreground first — Chrome suppresses
+    // programmatic downloads (a.click()) from background/inactive tabs.
+    await chrome.tabs.update(state.tabId, { active: true });
     await chrome.tabs.sendMessage(state.tabId, { action: 'stopRecording' });
   } catch {
     // Tab may have navigated — just clear the state

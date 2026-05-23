@@ -150,17 +150,24 @@ async function startRecording(options: RecordingOptions): Promise<void> {
 // ─── Stop Recording ───────────────────────────────────────────────────────────
 
 function stopRecording() {
-  // Always clean up overlays, even if the MediaRecorder was already stopped
-  // (e.g. user clicked Chrome's native "Stop sharing" button first)
   clearInterval(rec.timerInterval ?? 0);
   removeOverlays();
 
   if (!rec.mediaRecorder || rec.mediaRecorder.state === 'inactive') {
+    // Already stopped (e.g. Chrome's native "Stop sharing" button was used and
+    // finalizeRecording already ran). Just ensure streams are released.
+    releaseStreams();
     notifyBackground('recordingStopped');
     return;
   }
 
+  // Stop the recorder; let onstop → finalizeRecording handle stream teardown
+  // AFTER all buffered chunks have been flushed. Stopping tracks here would
+  // cause the last chunk to be empty/missing.
   rec.mediaRecorder.stop();
+}
+
+function releaseStreams() {
   rec.screenStream?.getTracks().forEach((t) => t.stop());
   rec.webcamStream?.getTracks().forEach((t) => t.stop());
   rec.micStream?.getTracks().forEach((t) => t.stop());
@@ -186,6 +193,7 @@ function finalizeRecording() {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 
+  releaseStreams();
   notifyBackground('recordingStopped');
 
   // Reset state
