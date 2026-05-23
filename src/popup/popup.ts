@@ -118,8 +118,19 @@ document.getElementById('btn-record-toggle')?.addEventListener('click', async ()
 // ─── Start recording ──────────────────────────────────────────────────────────
 
 document.getElementById('btn-record-start')?.addEventListener('click', async () => {
-  const tab = await getActiveTab();
-  if (!tab) return;
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!activeTab?.id || !activeTab.windowId) return;
+
+  if (!activeTab.url || activeTab.url.startsWith('chrome')) {
+    const label = document.getElementById('btn-record-label') as HTMLSpanElement;
+    const orig = label.textContent ?? '';
+    label.textContent = 'Switch to a web page first';
+    label.style.color = '#F85149';
+    setTimeout(() => { label.textContent = orig; label.style.color = ''; }, 3000);
+    return;
+  }
+
+  const tab = { tabId: activeTab.id, windowId: activeTab.windowId };
 
   const options: RecordingOptions = {
     mode: selectedMode,

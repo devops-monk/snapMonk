@@ -143,8 +143,9 @@ async function cropImage(
 
 async function initCanvas(imageUrl: string) {
   const img = await loadImg(imageUrl);
-  const W = img.naturalWidth;
-  const H = img.naturalHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(img.naturalWidth / dpr);
+  const H = Math.round(img.naturalHeight / dpr);
 
   canvas = new Canvas('editor-canvas', {
     width: W,
@@ -154,11 +155,16 @@ async function initCanvas(imageUrl: string) {
   });
 
   const bgImage = await FabricImage.fromURL(imageUrl);
-  bgImage.set({ selectable: false, evented: false });
+  bgImage.set({
+    selectable: false,
+    evented: false,
+    scaleX: W / img.naturalWidth,
+    scaleY: H / img.naturalHeight,
+  });
   canvas.backgroundImage = bgImage;
   canvas.renderAll();
 
-  fitToScreen();
+  requestAnimationFrame(() => fitToScreen());
 }
 
 // ─── Tools ────────────────────────────────────────────────────────────────────
@@ -225,8 +231,10 @@ function setTool(tool: Tool) {
     canvas.forEachObject((o) => { o.selectable = true; });
   } else if (tool === 'pen') {
     canvas.isDrawingMode = true;
-    canvas.freeDrawingBrush!.color = state.color;
-    canvas.freeDrawingBrush!.width = state.strokeWidth;
+    if (canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush.color = state.color;
+      canvas.freeDrawingBrush.width = state.strokeWidth;
+    }
     canvas.selection = false;
   } else {
     canvas.isDrawingMode = false;
@@ -515,7 +523,12 @@ async function restoreHistory() {
     canvas.loadFromJSON(JSON.parse(json), () => {
       canvas.backgroundImage = undefined as never;
       FabricImage.fromURL(baseImageUrl).then((img) => {
-        img.set({ selectable: false, evented: false });
+        const dpr = window.devicePixelRatio || 1;
+        img.set({
+          selectable: false, evented: false,
+          scaleX: canvas.width! / img.width! / dpr,
+          scaleY: canvas.height! / img.height! / dpr,
+        });
         canvas.backgroundImage = img;
         canvas.renderAll();
         resolve();
@@ -643,10 +656,9 @@ function getFilename(): string {
 }
 
 function renderFlatCanvas(): HTMLCanvasElement {
-  // Deselect everything before export
   canvas.discardActiveObject();
   canvas.renderAll();
-  return canvas.toCanvasElement();
+  return canvas.toCanvasElement(window.devicePixelRatio || 1);
 }
 
 async function copyToClipboard() {
