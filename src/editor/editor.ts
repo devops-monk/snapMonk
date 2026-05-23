@@ -8,6 +8,7 @@ import {
   FabricText,
   Path,
   Point,
+  Group,
   type TPointerEvent,
 } from 'fabric';
 import { getCapture } from '../utils/db';
@@ -283,22 +284,16 @@ function getCanvasPoint(e: TPointerEvent): Point {
 }
 
 function onMouseDown(opt: { e: TPointerEvent }) {
-  if (state.tool === 'select' || state.tool === 'pen' || state.tool === 'callout') return;
-  state.isDrawing = true;
+  if (state.tool === 'select' || state.tool === 'pen') return;
   const p = getCanvasPoint(opt.e);
+
+  if (state.tool === 'text') { addText(p.x, p.y); return; }
+  if (state.tool === 'callout') { addCallout(p.x, p.y); return; }
+  if (state.tool === 'step') { addStep(p.x, p.y); return; }
+
+  state.isDrawing = true;
   state.startPoint = { x: p.x, y: p.y };
   state.activeShape = null;
-
-  if (state.tool === 'text') {
-    addText(p.x, p.y);
-    state.isDrawing = false;
-  } else if (state.tool === 'callout') {
-    addCallout(p.x, p.y);
-    state.isDrawing = false;
-  } else if (state.tool === 'step') {
-    addStep(p.x, p.y);
-    state.isDrawing = false;
-  }
 }
 
 function onMouseMove(opt: { e: TPointerEvent }) {
@@ -507,19 +502,33 @@ async function applyCrop(x: number, y: number, w: number, h: number) {
   const ctx = cropCanvas.getContext('2d')!;
   ctx.drawImage(flat, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, cropCanvas.width, cropCanvas.height);
 
-  await new Promise<void>((resolve) => {
-    cropCanvas.toBlob(async (blob) => {
-      if (!blob) { resolve(); return; }
-      const url = URL.createObjectURL(blob);
-      baseImageUrl = url;
-      await initCanvas(url);
-      state.history = [];
-      state.historyIndex = -1;
-      pushHistory();
-      setTool('select');
-      resolve();
-    }, 'image/png');
+  const blob = await new Promise<Blob | null>((resolve) => cropCanvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+
+  const url = URL.createObjectURL(blob);
+  baseImageUrl = url;
+
+  // Resize the existing canvas in-place (avoids re-initialising a new Canvas instance)
+  const newW = Math.round(w);
+  const newH = Math.round(h);
+  canvas.setWidth(newW);
+  canvas.setHeight(newH);
+  canvas.clear();
+
+  const bgImage = await FabricImage.fromURL(url);
+  bgImage.set({
+    selectable: false, evented: false,
+    scaleX: newW / bgImage.width!,
+    scaleY: newH / bgImage.height!,
   });
+  canvas.backgroundImage = bgImage;
+  canvas.renderAll();
+
+  state.history = [];
+  state.historyIndex = -1;
+  pushHistory();
+  setTool('select');
+  requestAnimationFrame(() => fitToScreen());
 }
 
 function addCallout(x: number, y: number) {
@@ -672,17 +681,20 @@ function updateHistoryButtons() {
 function setupKeyboard() {
   document.addEventListener('keydown', async (e) => {
     const ctrl = e.ctrlKey || e.metaKey;
+    const fabricObj = canvas.getActiveObject() as { isEditing?: boolean } | null;
+    const isEditingText = fabricObj?.isEditing === true;
 
     if (ctrl && e.key === 'z') { e.preventDefault(); await undo(); }
     if (ctrl && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); await redo(); }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (!isEditingText && (e.key === 'Delete' || e.key === 'Backspace')) {
       if (document.activeElement?.tagName !== 'INPUT' &&
           !(document.activeElement as HTMLElement)?.isContentEditable) {
         deleteSelected();
       }
     }
 
-    // Tool shortcuts
+    // Tool shortcuts — disabled while typing in a Fabric text object
+    if (isEditingText) return;
     const toolMap: Record<string, Tool> = {
       v: 'select', a: 'arrow', l: 'line', r: 'rect', c: 'circle',
       t: 'text', p: 'pen', q: 'callout',
