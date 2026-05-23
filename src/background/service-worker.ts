@@ -84,7 +84,15 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
     await handleRegionCaptured(msg.rect);
     return;
   }
+
+  // Ignore non-capture messages (e.g. recordingStopped from the recorder toolbar)
+  // that also pass through the generic message listener.
   const pm = msg as PopupMessage;
+  if (!['captureVisible', 'captureFullPage', 'captureRegion', 'captureElement'].includes(pm.action)) {
+    return;
+  }
+  if (!pm.tabId) return;
+
   await dispatch(
     pm.action === 'captureVisible'
       ? 'visible'
