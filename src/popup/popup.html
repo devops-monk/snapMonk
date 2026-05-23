@@ -125,13 +125,14 @@
     <!-- Active recording status (shown during recording) -->
     <div id="record-active" style="display:none;margin-top:10px;background:#161B22;border:1px solid rgba(248,81,73,0.4);border-radius:10px;padding:10px 12px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#F85149;animation:pulse 1.2s infinite;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#F85149;animation:pulse 1.2s infinite;flex-shrink:0;"></div>
         <span style="font-size:12px;font-weight:700;color:#F85149;letter-spacing:.05em;">RECORDING</span>
         <span id="rec-live-timer" style="font-size:13px;font-weight:600;color:#E6EDF3;margin-left:auto;font-variant-numeric:tabular-nums;">00:00</span>
       </div>
-      <div style="font-size:11px;color:#8B949E;margin-top:4px;">
-        Recording toolbar is active on the page.
-      </div>
+      <button id="btn-record-stop" style="width:100%;margin-top:10px;padding:8px;background:#F85149;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" style="width:12px;height:12px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        Stop & Save
+      </button>
     </div>
 
   </div>

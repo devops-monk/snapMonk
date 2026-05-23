@@ -64,7 +64,8 @@ function startRegionSelect() {
       devicePixelRatio: dpr,
     };
     teardown();
-    sendToBackground({ action: 'regionSelected', rect });
+    // Wait for the browser to repaint without the overlay before screenshotting
+    setTimeout(() => sendToBackground({ action: 'regionSelected', rect }), 200);
   };
 
   overlay.addEventListener('mousedown', onMouseDown);

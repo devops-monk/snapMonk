@@ -21,19 +21,15 @@ async function sendCapture(action: PopupMessage['action']): Promise<void> {
   const tab = await getActiveTab();
   if (!tab) return;
 
-  setStatus(true, action === 'captureFullPage' ? 'Scrolling & capturing…' : 'Capturing…');
+  // Close the popup BEFORE capturing so it doesn't affect the viewport snapshot
+  window.close();
 
-  if (action === 'captureRegion' || action === 'captureElement') {
-    window.close();
-  }
-
-  await chrome.runtime.sendMessage<PopupMessage>({
+  // Fire and forget — popup is already closing so we can't await the response
+  chrome.runtime.sendMessage<PopupMessage>({
     action,
     tabId: tab.tabId,
     windowId: tab.windowId,
-  });
-
-  window.close();
+  }).catch(() => {});
 }
 
 document.getElementById('btn-visible')?.addEventListener('click', () => sendCapture('captureVisible'));
@@ -53,6 +49,7 @@ const STORAGE_KEY = 'snapmonk_recording_state';
 interface RecordingState {
   active: boolean;
   startTime: number;
+  tabId: number;
 }
 
 // Determine which panels to show based on stored recording state
@@ -131,9 +128,9 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
     format: 'webm',
   };
 
-  // Save recording state so popup can show live timer when reopened
+  // Save recording state (including tabId so we can stop from popup)
   await chrome.storage.local.set({
-    [STORAGE_KEY]: { active: true, startTime: Date.now() } satisfies RecordingState,
+    [STORAGE_KEY]: { active: true, startTime: Date.now(), tabId: tab.tabId } satisfies RecordingState,
   });
 
   // Inject the recorder toolbar into the tab, then send the begin message.
@@ -156,6 +153,22 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
   } catch (err) {
     await chrome.storage.local.remove(STORAGE_KEY);
     console.error('[SnapMonk] Recording start failed:', err);
+  }
+});
+
+// ─── Stop recording from popup ────────────────────────────────────────────────
+
+document.getElementById('btn-record-stop')?.addEventListener('click', async () => {
+  const stored = await chrome.storage.local.get(STORAGE_KEY) as Record<string, RecordingState>;
+  const state = stored[STORAGE_KEY] as RecordingState | undefined;
+  if (!state?.tabId) return;
+
+  try {
+    await chrome.tabs.sendMessage(state.tabId, { action: 'stopRecording' });
+  } catch {
+    // Tab may have navigated — just clear the state
+    await chrome.storage.local.remove(STORAGE_KEY);
+    showOptions();
   }
 });
 

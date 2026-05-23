@@ -108,9 +108,9 @@ async function dispatch(type: CaptureType, tabId: number, windowId: number): Pro
       case 'fullpage':
         return captureFullPage(tabId, windowId);
       case 'region':
-        return startRegionSelect(tabId);
+        return startRegionSelect(tabId, windowId);
       case 'element':
-        return startElementPick(tabId);
+        return startElementPick(tabId, windowId);
     }
   } catch (err) {
     console.error('[SnapMonk] Capture error:', err);
@@ -122,6 +122,8 @@ async function dispatch(type: CaptureType, tabId: number, windowId: number): Pro
 
 async function captureVisible(tabId: number, windowId: number): Promise<void> {
   const tab = await chrome.tabs.get(tabId);
+  // Give the popup time to fully close so it doesn't affect the captured viewport
+  await sleep(150);
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
   const blob = await dataUrlToBlob(dataUrl);
   const id = generateId();
@@ -144,6 +146,8 @@ async function captureVisible(tabId: number, windowId: number): Promise<void> {
 
 async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   const tab = await chrome.tabs.get(tabId);
+  // Give the popup time to fully close
+  await sleep(150);
 
   const [{ result: raw }] = await chrome.scripting.executeScript({
     target: { tabId },
@@ -151,6 +155,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
       scrollHeight: Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight,
       ),
       viewportHeight: window.innerHeight,
       viewportWidth: window.innerWidth,
@@ -190,7 +195,9 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
       func: (y: number) => { window.scrollTo(0, y); },
       args: [actualY],
     });
-    await sleep(180);
+    // Wait for page to repaint after scroll. Read user's preference or default to 300ms.
+    const { pref_scroll_delay } = await chrome.storage.sync.get({ pref_scroll_delay: '300' });
+    await sleep(parseInt(pref_scroll_delay as string, 10) || 300);
 
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
     sliceBlobs.push(await dataUrlToBlob(dataUrl));
@@ -232,23 +239,37 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
 
 // ─── Capture: Region / Element ────────────────────────────────────────────────
 
-async function startRegionSelect(tabId: number): Promise<void> {
+// Store which tab started region/element selection so we capture the right one
+let pendingRegionTabId = 0;
+let pendingRegionWindowId = 0;
+
+async function startRegionSelect(tabId: number, windowId: number): Promise<void> {
+  pendingRegionTabId = tabId;
+  pendingRegionWindowId = windowId;
   await injectOverlay(tabId);
   await chrome.tabs.sendMessage(tabId, { action: 'showRegionOverlay' });
 }
 
-async function startElementPick(tabId: number): Promise<void> {
+async function startElementPick(tabId: number, windowId: number): Promise<void> {
+  pendingRegionTabId = tabId;
+  pendingRegionWindowId = windowId;
   await injectOverlay(tabId);
   await chrome.tabs.sendMessage(tabId, { action: 'showElementPicker' });
 }
 
 async function handleRegionCaptured(rect: CropRect): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.windowId) return;
+  // Use the stored tab from when region select started — service worker has no "currentWindow"
+  const tabId = pendingRegionTabId;
+  const windowId = pendingRegionWindowId;
+  if (!tabId || !windowId) return;
 
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+  const tab = await chrome.tabs.get(tabId);
+  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
   const blob = await dataUrlToBlob(dataUrl);
   const id = generateId();
+
+  pendingRegionTabId = 0;
+  pendingRegionWindowId = 0;
 
   const record: CaptureRecord = {
     id,

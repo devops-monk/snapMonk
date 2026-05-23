@@ -105,14 +105,19 @@ async function startRecording(options: RecordingOptions): Promise<void> {
 // ─── Stop Recording ───────────────────────────────────────────────────────────
 
 function stopRecording() {
-  if (!rec.mediaRecorder || rec.mediaRecorder.state === 'inactive') return;
-  rec.mediaRecorder.stop();
-
-  rec.screenStream?.getTracks().forEach((t) => t.stop());
-  rec.webcamStream?.getTracks().forEach((t) => t.stop());
-
+  // Always clean up overlays, even if the MediaRecorder was already stopped
+  // (e.g. user clicked Chrome's native "Stop sharing" button first)
   clearInterval(rec.timerInterval ?? 0);
   removeOverlays();
+
+  if (!rec.mediaRecorder || rec.mediaRecorder.state === 'inactive') {
+    notifyBackground('recordingStopped');
+    return;
+  }
+
+  rec.mediaRecorder.stop();
+  rec.screenStream?.getTracks().forEach((t) => t.stop());
+  rec.webcamStream?.getTracks().forEach((t) => t.stop());
 }
 
 function notifyBackground(action: string) {
