@@ -1,6 +1,7 @@
 import {
   Canvas,
   FabricImage,
+  PencilBrush,
   Rect,
   Ellipse,
   Textbox,
@@ -26,6 +27,7 @@ const state = {
   color: '#F85149',
   strokeWidth: 3,
   fontSize: 20,
+  fillMode: 'outline' as 'outline' | 'filled',
   stepCounter: 1,
   zoom: 1,
   isDrawing: false,
@@ -181,8 +183,30 @@ function setupTools() {
       document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
       sw.classList.add('active');
       state.color = sw.dataset['color']!;
+      syncPenBrush();
       updateActiveObjectColor();
     });
+  });
+
+  // Custom color picker
+  const customColorInput = document.getElementById('custom-color') as HTMLInputElement;
+  customColorInput.addEventListener('input', () => {
+    state.color = customColorInput.value;
+    document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
+    syncPenBrush();
+    updateActiveObjectColor();
+  });
+
+  // Fill toggle
+  document.getElementById('btn-fill-outline')?.addEventListener('click', () => {
+    state.fillMode = 'outline';
+    document.getElementById('btn-fill-outline')?.classList.add('active');
+    document.getElementById('btn-fill-filled')?.classList.remove('active');
+  });
+  document.getElementById('btn-fill-filled')?.addEventListener('click', () => {
+    state.fillMode = 'filled';
+    document.getElementById('btn-fill-filled')?.classList.add('active');
+    document.getElementById('btn-fill-outline')?.classList.remove('active');
   });
 
   // Stroke slider
@@ -191,6 +215,7 @@ function setupTools() {
     state.strokeWidth = Number(strokeSlider.value);
     (document.getElementById('stroke-val') as HTMLSpanElement).textContent =
       `${state.strokeWidth}px`;
+    syncPenBrush();
     updateActiveObjectStroke();
   });
 
@@ -216,14 +241,15 @@ function setupTools() {
 
 function setTool(tool: Tool) {
   state.tool = tool;
-  state.stepCounter = tool === 'step' ? state.stepCounter : state.stepCounter;
 
   document.querySelectorAll('.tool-btn[data-tool]').forEach((b) => b.classList.remove('active'));
   document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active');
 
-  // Font size panel visibility
+  // Contextual property panels
+  const shapeStyle = document.getElementById('shape-style') as HTMLDivElement;
   const fontsizeSection = document.getElementById('fontsize-section') as HTMLDivElement;
-  fontsizeSection.style.display = tool === 'text' ? 'block' : 'none';
+  shapeStyle.style.display = (tool === 'rect' || tool === 'circle') ? '' : 'none';
+  fontsizeSection.style.display = tool === 'text' ? '' : 'none';
 
   if (tool === 'select') {
     canvas.isDrawingMode = false;
@@ -231,10 +257,11 @@ function setTool(tool: Tool) {
     canvas.forEachObject((o) => { o.selectable = true; });
   } else if (tool === 'pen') {
     canvas.isDrawingMode = true;
-    if (canvas.freeDrawingBrush) {
-      canvas.freeDrawingBrush.color = state.color;
-      canvas.freeDrawingBrush.width = state.strokeWidth;
+    if (!canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush = new PencilBrush(canvas);
     }
+    canvas.freeDrawingBrush.color = state.color;
+    canvas.freeDrawingBrush.width = state.strokeWidth;
     canvas.selection = false;
   } else {
     canvas.isDrawingMode = false;
@@ -243,6 +270,12 @@ function setTool(tool: Tool) {
     canvas.discardActiveObject();
     canvas.renderAll();
   }
+}
+
+function syncPenBrush() {
+  if (state.tool !== 'pen' || !canvas.freeDrawingBrush) return;
+  canvas.freeDrawingBrush.color = state.color;
+  canvas.freeDrawingBrush.width = state.strokeWidth;
 }
 
 // ─── Mouse Drawing ────────────────────────────────────────────────────────────
@@ -364,14 +397,15 @@ function makeArrow(x1: number, y1: number, x2: number, y2: number): Group {
 }
 
 function makeRect(x: number, y: number, w: number, h: number): Rect {
+  const filled = state.fillMode === 'filled';
   return new Rect({
     left: Math.min(x, x + w),
     top: Math.min(y, y + h),
     width: Math.abs(w),
     height: Math.abs(h),
     stroke: state.color,
-    strokeWidth: state.strokeWidth,
-    fill: 'transparent',
+    strokeWidth: filled ? 0 : state.strokeWidth,
+    fill: filled ? state.color : 'transparent',
     strokeUniform: true,
     selectable: false,
   });
@@ -380,14 +414,15 @@ function makeRect(x: number, y: number, w: number, h: number): Rect {
 function makeEllipse(x1: number, y1: number, x2: number, y2: number): Ellipse {
   const rx = Math.abs(x2 - x1) / 2;
   const ry = Math.abs(y2 - y1) / 2;
+  const filled = state.fillMode === 'filled';
   return new Ellipse({
     left: Math.min(x1, x2),
     top: Math.min(y1, y2),
     rx,
     ry,
     stroke: state.color,
-    strokeWidth: state.strokeWidth,
-    fill: 'transparent',
+    strokeWidth: filled ? 0 : state.strokeWidth,
+    fill: filled ? state.color : 'transparent',
     strokeUniform: true,
     selectable: false,
   });

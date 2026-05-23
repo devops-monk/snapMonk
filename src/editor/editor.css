@@ -111,13 +111,33 @@ html, body {
 }
 
 .tool-btn {
+  position: relative;
   display: flex; flex-direction: column; align-items: center;
-  gap: 4px; padding: 8px 4px; border-radius: 8px;
+  gap: 3px; padding: 10px 4px 7px; border-radius: 9px;
   border: 1px solid transparent; background: transparent;
   color: var(--color-muted); font-size: 10px; font-weight: 500;
-  cursor: pointer; transition: all 0.12s;
+  cursor: pointer; transition: all 0.12s; user-select: none;
 }
-.tool-btn svg { width: 18px; height: 18px; }
+.tool-btn svg { width: 20px; height: 20px; }
+.tool-name { font-size: 10px; line-height: 1; }
+
+/* Keyboard shortcut badge */
+.tool-kbd {
+  position: absolute;
+  top: 4px; right: 5px;
+  font-size: 8.5px; font-style: normal;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--color-dm-500);
+  background: var(--color-dm-700);
+  border: 1px solid var(--color-dm-600);
+  padding: 1px 3px; border-radius: 3px;
+  line-height: 1.4; opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+.tool-btn:hover .tool-kbd,
+.tool-btn.active .tool-kbd { opacity: 1; }
+
 .tool-btn:hover { background: var(--color-dm-700); color: var(--color-text); }
 .tool-btn.active {
   background: rgba(124,58,237,0.15);
@@ -130,36 +150,91 @@ html, body {
   margin: 8px 10px;
 }
 
-/* Color picker */
-.color-section { padding: 0 10px; }
+/* ── Property Sections ───────────────────────────────────────── */
+.prop-section { padding: 6px 10px 0; }
+
+.prop-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-muted);
+  margin-bottom: 6px;
+}
+
+.prop-label-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 5px;
+}
+.prop-label-row .prop-label { margin-bottom: 0; }
+.prop-val {
+  font-size: 11px; color: var(--color-muted);
+  font-family: 'SF Mono', monospace;
+}
+
+/* Fill toggle */
+.fill-toggle {
+  display: flex; gap: 4px;
+}
+.fill-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 5px; padding: 6px 8px; border-radius: 7px;
+  border: 1px solid var(--color-dm-600);
+  background: var(--color-dm-700); color: var(--color-muted);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: all 0.12s;
+}
+.fill-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.fill-btn:hover { border-color: var(--color-dm-500); color: var(--color-text); }
+.fill-btn.active {
+  border-color: var(--color-primary);
+  background: rgba(124,58,237,0.15);
+  color: var(--color-primary);
+}
+
+/* Color swatches */
 .color-swatches {
-  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;
+  display: flex; flex-wrap: wrap; gap: 5px;
 }
 .swatch {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 24px; height: 24px; border-radius: 50%;
   cursor: pointer; border: 2px solid transparent;
   transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
 }
-.swatch:hover { transform: scale(1.15); }
-.swatch.active { border-color: #fff; transform: scale(1.15); }
+.swatch:hover { transform: scale(1.18); }
+.swatch.active { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
 
-/* Stroke width */
-.stroke-section { padding: 8px 10px 0; }
-.stroke-section label {
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: var(--color-muted); margin-bottom: 5px;
+/* Custom color picker */
+.swatch-custom {
+  width: 24px; height: 24px; border-radius: 50%;
+  overflow: hidden; cursor: pointer;
+  border: 2px solid var(--color-dm-500);
+  display: flex; align-items: center; justify-content: center;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  flex-shrink: 0; transition: transform 0.1s, border-color 0.1s;
+  position: relative;
 }
+.swatch-custom:hover { transform: scale(1.18); border-color: #fff; }
+.swatch-custom input[type="color"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  width: 100%; height: 100%; padding: 0; border: none;
+}
+
+/* Sliders */
 input[type=range] {
   width: 100%; accent-color: var(--color-primary);
-  cursor: pointer;
+  cursor: pointer; height: 4px; border-radius: 2px;
 }
 
-/* Font size */
-.fontsize-section { padding: 6px 10px 0; }
-.fontsize-section label {
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: var(--color-muted); margin-bottom: 5px;
+/* Delete button */
+.delete-btn {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; width: 100%; padding: 8px 12px;
+  border-radius: 8px; border: 1px solid rgba(248,81,73,0.3);
+  background: rgba(248,81,73,0.07); color: var(--color-danger);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all 0.12s;
 }
+.delete-btn svg { width: 14px; height: 14px; }
+.delete-btn:hover { background: rgba(248,81,73,0.15); border-color: var(--color-danger); }
 
 /* ── Canvas Area ─────────────────────────────────────────────── */
 #canvas-wrap {
