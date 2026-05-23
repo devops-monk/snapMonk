@@ -38,7 +38,8 @@ const state = {
 };
 
 let canvas: Canvas;
-let baseImageUrl = ''; // data URL of the stitched/cropped base image
+let baseImageUrl = '';
+let isRestoringHistory = false;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -529,7 +530,7 @@ async function applyBlur(x: number, y: number, w: number, h: number) {
 // ─── History (Undo/Redo) ──────────────────────────────────────────────────────
 
 function pushHistory() {
-  // Trim forward history
+  if (isRestoringHistory) return;
   state.history = state.history.slice(0, state.historyIndex + 1);
   state.history.push(JSON.stringify(canvas.toJSON(['selectable', 'evented'])));
   state.historyIndex = state.history.length - 1;
@@ -552,23 +553,20 @@ async function restoreHistory() {
   const json = state.history[state.historyIndex];
   if (!json) return;
 
-  // Temporarily disable history push during restore
-  const saved = canvas.getObjects().length;
-  await new Promise<void>((resolve) => {
-    canvas.loadFromJSON(JSON.parse(json), () => {
-      canvas.backgroundImage = undefined as never;
-      FabricImage.fromURL(baseImageUrl).then((img) => {
-        img.set({
-          selectable: false, evented: false,
-          scaleX: canvas.width! / img.width!,
-          scaleY: canvas.height! / img.height!,
-        });
-        canvas.backgroundImage = img;
-        canvas.renderAll();
-        resolve();
-      });
+  isRestoringHistory = true;
+  try {
+    await canvas.loadFromJSON(JSON.parse(json));
+    const img = await FabricImage.fromURL(baseImageUrl);
+    img.set({
+      selectable: false, evented: false,
+      scaleX: canvas.width! / img.width!,
+      scaleY: canvas.height! / img.height!,
     });
-  });
+    canvas.backgroundImage = img;
+    canvas.renderAll();
+  } finally {
+    isRestoringHistory = false;
+  }
 
   updateHistoryButtons();
 }
