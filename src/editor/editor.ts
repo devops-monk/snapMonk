@@ -523,11 +523,10 @@ async function restoreHistory() {
     canvas.loadFromJSON(JSON.parse(json), () => {
       canvas.backgroundImage = undefined as never;
       FabricImage.fromURL(baseImageUrl).then((img) => {
-        const dpr = window.devicePixelRatio || 1;
         img.set({
           selectable: false, evented: false,
-          scaleX: canvas.width! / img.width! / dpr,
-          scaleY: canvas.height! / img.height! / dpr,
+          scaleX: canvas.width! / img.width!,
+          scaleY: canvas.height! / img.height!,
         });
         canvas.backgroundImage = img;
         canvas.renderAll();

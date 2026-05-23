@@ -104,13 +104,13 @@ async function dispatch(type: CaptureType, tabId: number, windowId: number): Pro
   try {
     switch (type) {
       case 'visible':
-        return captureVisible(tabId, windowId);
+        return await captureVisible(tabId, windowId);
       case 'fullpage':
-        return captureFullPage(tabId, windowId);
+        return await captureFullPage(tabId, windowId);
       case 'region':
-        return startRegionSelect(tabId, windowId);
+        return await startRegionSelect(tabId, windowId);
       case 'element':
-        return startElementPick(tabId, windowId);
+        return await startElementPick(tabId, windowId);
     }
   } catch (err) {
     console.error('[SnapMonk] Capture error:', err);
@@ -149,7 +149,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   // Give the popup time to fully close
   await sleep(150);
 
-  const [{ result: raw }] = await chrome.scripting.executeScript({
+  const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => ({
       scrollHeight: Math.max(
@@ -165,14 +165,16 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     }),
   });
 
-  const pageRaw = raw as {
+  const pageRaw = results[0]?.result as {
     scrollHeight: number;
     viewportHeight: number;
     viewportWidth: number;
     scrollY: number;
     scrollX: number;
     devicePixelRatio: number;
-  };
+  } | undefined;
+
+  if (!pageRaw) throw new Error('Could not read page dimensions');
 
   const { scrollHeight, viewportHeight, viewportWidth, scrollX, scrollY: origY, devicePixelRatio } = pageRaw;
 
