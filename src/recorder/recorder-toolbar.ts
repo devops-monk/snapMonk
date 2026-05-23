@@ -12,6 +12,7 @@ interface RecorderState {
   mediaRecorder: MediaRecorder | null;
   screenStream: MediaStream | null;
   webcamStream: MediaStream | null;
+  micStream: MediaStream | null;
   chunks: Blob[];
   startTime: number;
   timerInterval: ReturnType<typeof setInterval> | null;
@@ -23,6 +24,7 @@ const rec: RecorderState = {
   mediaRecorder: null,
   screenStream: null,
   webcamStream: null,
+  micStream: null,
   chunks: [],
   startTime: 0,
   timerInterval: null,
@@ -52,28 +54,43 @@ function initRecorder() {
 async function startRecording(options: RecordingOptions): Promise<void> {
   rec.options = options;
 
-  // Countdown 3…2…1 before capture
   await showCountdown(3);
 
-  // Get screen stream
+  // Map the user's mode choice to Chrome's displaySurface hint so the picker
+  // pre-selects the right source. 'monitor' (desktop) lets the user switch
+  // tabs freely; 'browser' (tab) only captures the specific tab chosen.
+  const displaySurface = options.mode === 'tab' ? 'browser'
+    : options.mode === 'window' ? 'window'
+    : 'monitor';
+
   try {
     rec.screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: {
         frameRate: { ideal: 30, max: 60 },
         width: { ideal: screen.width },
         height: { ideal: screen.height },
+        displaySurface,
       } as MediaTrackConstraints,
-      audio: options.mic,
+      audio: true, // capture system/tab audio when the OS permits it
     });
   } catch {
     // User cancelled the picker
     return;
   }
 
-  // Stop recording if user closes the screen share picker
   rec.screenStream.getVideoTracks()[0]?.addEventListener('ended', () => stopRecording());
 
-  // Get webcam stream (separate, no audio from webcam)
+  // Microphone captured separately so it's independent of screen-share audio.
+  // getDisplayMedia({ audio: true }) only gets system audio, not the mic.
+  if (options.mic) {
+    try {
+      rec.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch {
+      rec.micStream = null;
+    }
+  }
+
+  // Webcam bubble (video only — audio comes from micStream above)
   if (options.webcam) {
     try {
       rec.webcamStream = await navigator.mediaDevices.getUserMedia({
@@ -82,20 +99,25 @@ async function startRecording(options: RecordingOptions): Promise<void> {
       });
       injectWebcamBubble(rec.webcamStream);
     } catch {
-      // Webcam not available, continue without it
       rec.webcamStream = null;
     }
   }
 
-  // Start MediaRecorder on screen stream
+  // Combine: screen video + system audio + microphone audio
+  const combinedStream = new MediaStream([
+    ...rec.screenStream.getVideoTracks(),
+    ...rec.screenStream.getAudioTracks(),
+    ...(rec.micStream?.getAudioTracks() ?? []),
+  ]);
+
   const mimeType = getSupportedMimeType();
   rec.chunks = [];
-  rec.mediaRecorder = new MediaRecorder(rec.screenStream, { mimeType });
+  rec.mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
   rec.mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) rec.chunks.push(e.data);
   };
   rec.mediaRecorder.onstop = () => finalizeRecording();
-  rec.mediaRecorder.start(1000); // collect chunks every 1s
+  rec.mediaRecorder.start(1000);
 
   rec.startTime = Date.now();
   rec.isPaused = false;
@@ -118,6 +140,7 @@ function stopRecording() {
   rec.mediaRecorder.stop();
   rec.screenStream?.getTracks().forEach((t) => t.stop());
   rec.webcamStream?.getTracks().forEach((t) => t.stop());
+  rec.micStream?.getTracks().forEach((t) => t.stop());
 }
 
 function notifyBackground(action: string) {
@@ -145,6 +168,7 @@ function finalizeRecording() {
   rec.mediaRecorder = null;
   rec.screenStream = null;
   rec.webcamStream = null;
+  rec.micStream = null;
   rec.chunks = [];
 }
 
