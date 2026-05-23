@@ -17,7 +17,7 @@ import { initBugReportPanel } from '../ai/bug-report-panel';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-type Tool = 'select' | 'arrow' | 'rect' | 'circle' | 'text' | 'pen' | 'highlight' | 'blur' | 'step' | 'crop';
+type Tool = 'select' | 'arrow' | 'line' | 'rect' | 'circle' | 'text' | 'pen' | 'callout' | 'highlight' | 'blur' | 'redact' | 'step' | 'crop';
 
 const state = {
   tool: 'select' as Tool,
@@ -247,7 +247,7 @@ function setTool(tool: Tool) {
   const shapeStyle = document.getElementById('shape-style') as HTMLDivElement;
   const fontsizeSection = document.getElementById('fontsize-section') as HTMLDivElement;
   shapeStyle.style.display = (tool === 'rect' || tool === 'circle') ? '' : 'none';
-  fontsizeSection.style.display = tool === 'text' ? '' : 'none';
+  fontsizeSection.style.display = (tool === 'text' || tool === 'callout') ? '' : 'none';
 
   if (tool === 'select') {
     canvas.isDrawingMode = false;
@@ -283,7 +283,7 @@ function getCanvasPoint(e: TPointerEvent): Point {
 }
 
 function onMouseDown(opt: { e: TPointerEvent }) {
-  if (state.tool === 'select' || state.tool === 'pen') return;
+  if (state.tool === 'select' || state.tool === 'pen' || state.tool === 'callout') return;
   state.isDrawing = true;
   const p = getCanvasPoint(opt.e);
   state.startPoint = { x: p.x, y: p.y };
@@ -291,6 +291,9 @@ function onMouseDown(opt: { e: TPointerEvent }) {
 
   if (state.tool === 'text') {
     addText(p.x, p.y);
+    state.isDrawing = false;
+  } else if (state.tool === 'callout') {
+    addCallout(p.x, p.y);
     state.isDrawing = false;
   } else if (state.tool === 'step') {
     addStep(p.x, p.y);
@@ -313,6 +316,9 @@ function onMouseMove(opt: { e: TPointerEvent }) {
     case 'arrow':
       shape = makeArrow(sx, sy, p.x, p.y);
       break;
+    case 'line':
+      shape = makeLine(sx, sy, p.x, p.y);
+      break;
     case 'rect':
       shape = makeRect(sx, sy, p.x - sx, p.y - sy);
       break;
@@ -323,7 +329,11 @@ function onMouseMove(opt: { e: TPointerEvent }) {
       shape = makeHighlight(sx, sy, p.x - sx, p.y - sy);
       break;
     case 'blur':
-      shape = makeBlurPreview(sx, sy, p.x - sx, p.y - sy);
+    case 'redact':
+      shape = makeDashedPreview(sx, sy, p.x - sx, p.y - sy);
+      break;
+    case 'crop':
+      shape = makeCropPreview(sx, sy, p.x - sx, p.y - sy);
       break;
   }
 
@@ -340,14 +350,20 @@ async function onMouseUp(opt: { e: TPointerEvent }) {
   const p = getCanvasPoint(opt.e);
   const { x: sx, y: sy } = state.startPoint;
 
-  if (state.tool === 'blur' && state.activeShape) {
+  const x = Math.min(sx, p.x);
+  const y = Math.min(sy, p.y);
+  const w = Math.abs(p.x - sx);
+  const h = Math.abs(p.y - sy);
+
+  if ((state.tool === 'blur' || state.tool === 'redact' || state.tool === 'crop') && state.activeShape) {
     canvas.remove(state.activeShape as never);
     state.activeShape = null;
-    const x = Math.min(sx, p.x);
-    const y = Math.min(sy, p.y);
-    const w = Math.abs(p.x - sx);
-    const h = Math.abs(p.y - sy);
-    if (w > 4 && h > 4) await applyBlur(x, y, w, h);
+    if (w > 4 && h > 4) {
+      if (state.tool === 'blur') await applyBlur(x, y, w, h);
+      else if (state.tool === 'redact') applyRedact(x, y, w, h);
+      else if (state.tool === 'crop') await applyCrop(x, y, w, h);
+    }
+    return;
   }
 
   if (state.activeShape) {
@@ -432,7 +448,7 @@ function makeHighlight(x: number, y: number, w: number, h: number): Rect {
   });
 }
 
-function makeBlurPreview(x: number, y: number, w: number, h: number): Rect {
+function makeDashedPreview(x: number, y: number, w: number, h: number): Rect {
   return new Rect({
     left: Math.min(x, x + w),
     top: Math.min(y, y + h),
@@ -444,6 +460,88 @@ function makeBlurPreview(x: number, y: number, w: number, h: number): Rect {
     strokeDashArray: [6, 4],
     selectable: false,
   });
+}
+
+function makeCropPreview(x: number, y: number, w: number, h: number): Rect {
+  const lx = Math.min(x, x + w), ly = Math.min(y, y + h);
+  const aw = Math.abs(w), ah = Math.abs(h);
+  return new Rect({
+    left: lx, top: ly, width: aw, height: ah,
+    fill: 'rgba(0,0,0,0.35)',
+    stroke: '#fff',
+    strokeWidth: 1.5,
+    strokeDashArray: [5, 3],
+    selectable: false,
+  });
+}
+
+function makeLine(x1: number, y1: number, x2: number, y2: number): Path {
+  return new Path(`M ${x1} ${y1} L ${x2} ${y2}`, {
+    stroke: state.color,
+    strokeWidth: state.strokeWidth,
+    fill: 'transparent',
+    strokeLineCap: 'round',
+    selectable: false,
+    objectCaching: false,
+  });
+}
+
+function applyRedact(x: number, y: number, w: number, h: number) {
+  const rect = new Rect({
+    left: x, top: y, width: w, height: h,
+    fill: state.color,
+    stroke: 'transparent',
+    selectable: true,
+  });
+  canvas.add(rect);
+  canvas.setActiveObject(rect);
+  canvas.renderAll();
+}
+
+async function applyCrop(x: number, y: number, w: number, h: number) {
+  const flat = renderFlatCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = Math.round(w * dpr);
+  cropCanvas.height = Math.round(h * dpr);
+  const ctx = cropCanvas.getContext('2d')!;
+  ctx.drawImage(flat, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, cropCanvas.width, cropCanvas.height);
+
+  await new Promise<void>((resolve) => {
+    cropCanvas.toBlob(async (blob) => {
+      if (!blob) { resolve(); return; }
+      const url = URL.createObjectURL(blob);
+      baseImageUrl = url;
+      await initCanvas(url);
+      state.history = [];
+      state.historyIndex = -1;
+      pushHistory();
+      setTool('select');
+      resolve();
+    }, 'image/png');
+  });
+}
+
+function addCallout(x: number, y: number) {
+  const text = new Textbox('Label', {
+    left: x,
+    top: y,
+    fontSize: state.fontSize,
+    fill: state.color,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontWeight: '700',
+    backgroundColor: hexToRgba(state.color, 0.14),
+    editable: true,
+    selectable: true,
+    width: 160,
+    padding: 10,
+  });
+  canvas.add(text);
+  canvas.setActiveObject(text);
+  text.enterEditing();
+  text.selectAll();
+  canvas.renderAll();
+  setTool('select');
 }
 
 async function addText(x: number, y: number) {
@@ -586,8 +684,9 @@ function setupKeyboard() {
 
     // Tool shortcuts
     const toolMap: Record<string, Tool> = {
-      v: 'select', a: 'arrow', r: 'rect', c: 'circle',
-      t: 'text', p: 'pen', h: 'highlight', b: 'blur',
+      v: 'select', a: 'arrow', l: 'line', r: 'rect', c: 'circle',
+      t: 'text', p: 'pen', q: 'callout',
+      h: 'highlight', b: 'blur', d: 'redact',
       s: 'step', x: 'crop',
     };
     if (!ctrl && !e.altKey && toolMap[e.key]) setTool(toolMap[e.key]!);

@@ -7,11 +7,15 @@ if (!(window as unknown as Record<string, boolean>)['__snapmonk_overlay__']) {
 }
 
 function initOverlay() {
-  chrome.runtime.onMessage.addListener((msg: ContentMessage) => {
-    if (msg.action === 'showRegionOverlay') startRegionSelect();
-    if (msg.action === 'showElementPicker') startElementPick();
-    if (msg.action === 'cancelOverlay') teardown();
-  });
+  try {
+    chrome.runtime.onMessage.addListener((msg: ContentMessage) => {
+      if (msg.action === 'showRegionOverlay') startRegionSelect();
+      if (msg.action === 'showElementPicker') startElementPick();
+      if (msg.action === 'cancelOverlay') teardown();
+    });
+  } catch {
+    // Extension context invalidated (e.g. extension reloaded while tab was open)
+  }
 }
 
 // ─── Region Selection ─────────────────────────────────────────────────────────
@@ -159,8 +163,9 @@ function updateHint(el: HTMLDivElement, w: number, h: number) {
 }
 
 function sendToBackground(msg: BackgroundMessage) {
-  chrome.runtime.sendMessage(msg).catch(() => {
-    // Service worker may have restarted; retry once
-    setTimeout(() => chrome.runtime.sendMessage(msg), 300);
-  });
+  try {
+    chrome.runtime.sendMessage(msg).catch(() => {
+      setTimeout(() => { try { chrome.runtime.sendMessage(msg); } catch {} }, 300);
+    });
+  } catch {}
 }
