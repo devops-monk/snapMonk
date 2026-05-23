@@ -682,15 +682,14 @@ function downloadAsPdf() {
   const el = renderFlatCanvas();
   const dataUrl = el.toDataURL('image/png');
   const win = window.open('', '_blank')!;
-  win.document.write(`
-    <!DOCTYPE html><html><head><title>${getFilename()}</title>
-    <style>*{margin:0;padding:0;}img{width:100vw;height:100vh;object-fit:contain;}</style>
-    </head><body>
-    <img src="${dataUrl}">
-    <script>window.onload=()=>{window.print();}<\/script>
-    </body></html>
-  `);
+  win.document.write(
+    `<!DOCTYPE html><html><head><title>${getFilename()}</title>` +
+    `<style>*{margin:0;padding:0;}img{width:100vw;height:100vh;object-fit:contain;}</style>` +
+    `</head><body><img src="${dataUrl}"></body></html>`
+  );
   win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 250);
 }
 
 function triggerDownload(dataUrl: string, filename: string) {
