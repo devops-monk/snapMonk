@@ -85,8 +85,15 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
     return;
   }
 
-  // Ignore non-capture messages (e.g. recordingStopped from the recorder toolbar)
-  // that also pass through the generic message listener.
+  // When the recorder toolbar finishes (or errors), clear the recording state
+  // so the popup shows the correct UI even if it was closed during recording.
+  const action = (msg as { action: string }).action;
+  if (action === 'recordingStopped' || action === 'recordingError') {
+    await chrome.storage.local.remove('snapmonk_recording_state');
+    return;
+  }
+
+  // Ignore any other non-capture messages that pass through the generic listener.
   const pm = msg as PopupMessage;
   if (!['captureVisible', 'captureFullPage', 'captureRegion', 'captureElement'].includes(pm.action)) {
     return;
