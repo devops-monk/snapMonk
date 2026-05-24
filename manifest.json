@@ -34,7 +34,6 @@
     "contextMenus",
     "tabCapture"
   ],
-  "host_permissions": ["<all_urls>"],
   "web_accessible_resources": [
     {
       "resources": ["src/editor/editor.html", "icons/*"],
