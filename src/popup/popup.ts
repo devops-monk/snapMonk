@@ -1,5 +1,11 @@
 import type { PopupMessage, RecordingOptions, RecorderMessage, RecordingFormat } from '../utils/types';
 
+// ─── Wake service worker on popup open ───────────────────────────────────────
+// MV3 service workers go dormant between uses. Sending a ping immediately when
+// the popup opens ensures the worker is fully awake before the user clicks a
+// capture button — preventing the "first click does nothing" bug.
+chrome.runtime.sendMessage({ action: 'ping' }).catch(() => {});
+
 // ─── Tab switching ────────────────────────────────────────────────────────────
 
 function switchPanel(name: 'capture' | 'record') {
