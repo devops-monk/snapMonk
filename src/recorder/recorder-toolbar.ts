@@ -118,7 +118,8 @@ async function startRecording(options: RecordingOptions): Promise<void> {
 
   // MediaRecorder only records the first audio track it finds, so we must mix
   // all audio sources (system + mic) into a single track via AudioContext.
-  rec.audioCtx = new AudioContext();
+  // latencyHint: 'playback' uses larger buffers — reduces audio dropouts vs default.
+  rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
   const mixDest = rec.audioCtx.createMediaStreamDestination();
 
   for (const track of rec.screenStream.getAudioTracks()) {
@@ -137,12 +138,16 @@ async function startRecording(options: RecordingOptions): Promise<void> {
 
   const mimeType = getSupportedMimeType(options.format === 'mp4');
   rec.chunks = [];
-  rec.mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+  rec.mediaRecorder = new MediaRecorder(combinedStream, {
+    mimeType,
+    audioBitsPerSecond: 128000,
+  });
   rec.mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) rec.chunks.push(e.data);
   };
   rec.mediaRecorder.onstop = () => finalizeRecording();
-  rec.mediaRecorder.start(1000);
+  // 250ms chunks — smaller slices prevent audio gaps from buffer underruns
+  rec.mediaRecorder.start(250);
 
   rec.startTime = Date.now();
   rec.isPaused = false;
