@@ -76,11 +76,16 @@ jobs:
       # Main branch: upload & publish to Chrome Web Store
       - name: Publish to Chrome Web Store
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
         run: |
           npx chrome-webstore-upload-cli@3 upload \
             --source snapmonk.zip \
-            --extension-id "${{ secrets.CHROME_EXTENSION_ID }}" \
-            --client-id "${{ secrets.CHROME_CLIENT_ID }}" \
-            --client-secret "${{ secrets.CHROME_CLIENT_SECRET }}" \
-            --refresh-token "${{ secrets.CHROME_REFRESH_TOKEN }}" \
+            --extension-id "$EXTENSION_ID" \
+            --client-id "$CLIENT_ID" \
+            --client-secret "$CLIENT_SECRET" \
+            --refresh-token "$REFRESH_TOKEN" \
             --auto-publish
