@@ -208,6 +208,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   const sliceBlobs: Blob[] = [];
   const sliceMeta: SliceMeta[] = [];
   let requestedY = 0;
+  let fixedHidden = false;
 
   while (requestedY < scrollHeight) {
     const actualY = Math.min(requestedY, Math.max(0, scrollHeight - viewportHeight));
@@ -219,11 +220,42 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     });
     await sleep(scrollDelay);
 
+    // From the second slice onward, hide fixed/sticky elements so they don't
+    // repeat in every viewport screenshot and appear multiple times when stitched.
+    if (requestedY > 0 && !fixedHidden) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          document.querySelectorAll<HTMLElement>('*').forEach((el) => {
+            const pos = window.getComputedStyle(el).position;
+            if (pos === 'fixed' || pos === 'sticky') {
+              el.dataset['smVis'] = el.style.visibility;
+              el.style.setProperty('visibility', 'hidden', 'important');
+            }
+          });
+        },
+      });
+      fixedHidden = true;
+    }
+
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
     sliceBlobs.push(await dataUrlToBlob(dataUrl));
     sliceMeta.push({ requestedY, actualY });
 
     requestedY += viewportHeight;
+  }
+
+  // Restore fixed/sticky elements
+  if (fixedHidden) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        document.querySelectorAll<HTMLElement>('[data-sm-vis]').forEach((el) => {
+          el.style.visibility = el.dataset['smVis'] ?? '';
+          delete el.dataset['smVis'];
+        });
+      },
+    });
   }
 
   // Restore scroll
