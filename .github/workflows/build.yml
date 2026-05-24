@@ -48,8 +48,7 @@ jobs:
           path: snapmonk.zip
           retention-days: 14
 
-      # Main branch: update the rolling "latest" release so there's always
-      # a direct download link at github.com/devops-monk/snapMonk/releases/latest
+      # Main branch: update the rolling "latest" release
       - name: Publish rolling "latest" release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -73,3 +72,15 @@ jobs:
           prerelease: true
           make_latest: true
           files: snapmonk.zip
+
+      # Main branch: upload & publish to Chrome Web Store
+      - name: Publish to Chrome Web Store
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          npx chrome-webstore-upload-cli@3 upload \
+            --source snapmonk.zip \
+            --extension-id "${{ secrets.CHROME_EXTENSION_ID }}" \
+            --client-id "${{ secrets.CHROME_CLIENT_ID }}" \
+            --client-secret "${{ secrets.CHROME_CLIENT_SECRET }}" \
+            --refresh-token "${{ secrets.CHROME_REFRESH_TOKEN }}" \
+            --auto-publish
