@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SnapMonk — Screenshot & Annotation Tool",
   "short_name": "SnapMonk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Capture, annotate & share screenshots instantly. Full-page capture, rich editor & DevOps integrations — by DevOps-Monk.",
   "icons": {
     "16": "icons/icon16.png",
