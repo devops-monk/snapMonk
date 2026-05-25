@@ -137,8 +137,16 @@ async function dispatch(type: CaptureType, tabId: number, windowId: number): Pro
 
 async function captureVisible(tabId: number, windowId: number): Promise<void> {
   const tab = await chrome.tabs.get(tabId);
-  // Give the popup time to fully close so it doesn't affect the captured viewport
-  await sleep(150);
+  // Close popup → refocus window → wait for tab to repaint at full viewport size.
+  // A fixed sleep isn't enough because the popup overlay can occlude the right
+  // side and the tab's render cache needs two animation frames to fully refresh.
+  await sleep(200);
+  await chrome.windows.update(windowId, { focused: true });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  }).catch(() => {});
+  await sleep(50);
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
   const blob = await dataUrlToBlob(dataUrl);
   const id = generateId();

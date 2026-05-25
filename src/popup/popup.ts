@@ -26,15 +26,38 @@ document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach((btn) => {
 
 // ─── Capture helpers ──────────────────────────────────────────────────────────
 
-async function getActiveTab(): Promise<{ tabId: number; windowId: number } | null> {
+function isRestrictedUrl(url: string | undefined): boolean {
+  if (!url) return true;
+  const restricted = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
+  return restricted.some((prefix) => url.startsWith(prefix));
+}
+
+async function getActiveTab(): Promise<{ tabId: number; windowId: number; url?: string } | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.windowId) return null;
-  return { tabId: tab.id, windowId: tab.windowId };
+  return { tabId: tab.id, windowId: tab.windowId, url: tab.url };
 }
+
+function showRestrictedBanner(): void {
+  const banner = document.getElementById('restricted-banner') as HTMLDivElement;
+  banner.style.display = 'flex';
+  document.getElementById('btn-goto-record')?.addEventListener('click', () => {
+    switchPanel('record');
+    banner.style.display = 'none';
+  });
+}
+
+const SCRIPTING_ACTIONS: PopupMessage['action'][] = ['captureFullPage', 'captureRegion', 'captureElement'];
 
 async function sendCapture(action: PopupMessage['action']): Promise<void> {
   const tab = await getActiveTab();
   if (!tab) return;
+
+  if (SCRIPTING_ACTIONS.includes(action) && isRestrictedUrl(tab.url)) {
+    showRestrictedBanner();
+    return;
+  }
+
   window.close();
   chrome.runtime.sendMessage<PopupMessage>({
     action,
