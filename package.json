@@ -1,6 +1,6 @@
 {
   "name": "snapmonk",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Capture. Annotate. Ship. — by DevOps-Monk",
   "type": "module",
   "scripts": {
