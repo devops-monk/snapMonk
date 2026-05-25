@@ -725,8 +725,15 @@ function setupZoom() {
 function setZoom(zoom: number) {
   state.zoom = Math.max(0.1, Math.min(5, zoom));
   const container = document.getElementById('canvas-container') as HTMLDivElement;
+  const scrollArea = document.getElementById('canvas-scroll-area') as HTMLDivElement;
   container.style.transform = `scale(${state.zoom})`;
   container.style.transformOrigin = 'top left';
+  // Keep scroll-area sized to the visual canvas so canvas-wrap never has
+  // spurious overflow that would clip the right/bottom of the image.
+  if (canvas) {
+    scrollArea.style.width = `${Math.round(canvas.width! * state.zoom)}px`;
+    scrollArea.style.height = `${Math.round(canvas.height! * state.zoom)}px`;
+  }
   (document.getElementById('zoom-label') as HTMLSpanElement).textContent =
     `${Math.round(state.zoom * 100)}%`;
 }

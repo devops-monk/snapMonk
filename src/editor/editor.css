@@ -227,16 +227,25 @@ input[type=range] {
 #canvas-wrap {
   grid-area: canvas;
   overflow: auto;
-  display: flex; align-items: flex-start; justify-content: flex-start;
+  display: flex; align-items: flex-start; justify-content: center;
   background:
     radial-gradient(circle, var(--color-dm-700) 1px, transparent 1px) 0 0 / 20px 20px,
     var(--color-dm-900);
   padding: 24px;
 }
 
-#canvas-container {
+/* Sized by JS to match the visual (zoomed) canvas dimensions.
+   This prevents layout overflow that would cause canvas-wrap to
+   scroll and clip the right/bottom edges of the image. */
+#canvas-scroll-area {
   position: relative;
-  display: inline-block;
+  flex-shrink: 0;
+}
+
+#canvas-container {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: top left;
   box-shadow: 0 8px 40px rgba(0,0,0,0.5);
   border-radius: 4px;
   overflow: hidden;
