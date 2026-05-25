@@ -23,6 +23,15 @@ jobs:
         with:
           node-version: 22
 
+      - name: Bump version from commit count
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION="1.0.${COMMIT_COUNT}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          jq ".version = \"$VERSION\"" manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
+          jq ".version = \"$VERSION\"" package.json  > package.json.tmp  && mv package.json.tmp  package.json
+          echo "Version set to $VERSION"
+
       - name: Install dependencies
         run: rm -f package-lock.json && npm install
 
@@ -37,6 +46,7 @@ jobs:
       - name: Summary
         run: |
           echo "### Build complete" >> $GITHUB_STEP_SUMMARY
+          echo "Version: **${{ env.VERSION }}**" >> $GITHUB_STEP_SUMMARY
           echo "Zip size: **${{ env.ZIP_SIZE }}**" >> $GITHUB_STEP_SUMMARY
 
       # PRs: just upload as artifact so reviewers can test
@@ -54,7 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "Latest build"
+          name: "v${{ env.VERSION }}"
           body: |
             Automated build from the latest commit on `main`.
 
