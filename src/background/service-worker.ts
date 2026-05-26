@@ -192,37 +192,99 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
 
   const results = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => ({
-      scrollHeight: Math.max(
+    func: () => {
+      // Detect a primary inner scrollable container for SPA-style pages (Jira, GitLab, etc.)
+      // where the document body doesn't scroll but a large inner element does.
+      function detectInnerScroller() {
+        const docScrollHeight = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight,
+          document.documentElement.offsetHeight,
+        );
+        if (docScrollHeight > window.innerHeight + 50) return null; // page scrolls normally
+
+        let best: HTMLElement | null = null;
+        let bestScrollHeight = 0;
+        document.querySelectorAll<HTMLElement>('*').forEach((el) => {
+          const oy = window.getComputedStyle(el).overflowY;
+          if (oy !== 'auto' && oy !== 'scroll') return;
+          const sh = el.scrollHeight;
+          const ch = el.clientHeight;
+          if (sh <= ch + 50) return;           // not meaningfully scrollable
+          if (ch < window.innerHeight * 0.3) return; // too small to be main content
+          if (sh > bestScrollHeight) { bestScrollHeight = sh; best = el; }
+        });
+        if (!best) return null;
+        best.setAttribute('data-sm-scroller', '1');
+        const rect = best.getBoundingClientRect();
+        return {
+          scrollHeight: best.scrollHeight,
+          clientHeight: best.clientHeight,
+          clientWidth: best.clientWidth,
+          scrollTop: best.scrollTop,
+          rectTop: rect.top,
+          rectLeft: rect.left,
+        };
+      }
+
+      const inner = detectInnerScroller();
+      const docScrollHeight = Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight,
         document.documentElement.offsetHeight,
-      ),
-      viewportHeight: window.innerHeight,
-      viewportWidth: window.innerWidth,
-      scrollY: window.scrollY,
-      scrollX: window.scrollX,
-      devicePixelRatio: window.devicePixelRatio || 1,
-    }),
+      );
+      return {
+        scrollHeight: inner?.scrollHeight ?? docScrollHeight,
+        viewportHeight: inner?.clientHeight ?? window.innerHeight,
+        viewportWidth: inner?.clientWidth ?? window.innerWidth,
+        windowScrollY: window.scrollY,
+        windowScrollX: window.scrollX,
+        containerScrollTop: inner?.scrollTop ?? 0,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        // Rect to crop each screenshot to (null = full viewport / window scroll mode)
+        containerRect: inner
+          ? { top: inner.rectTop, left: inner.rectLeft, width: inner.clientWidth, height: inner.clientHeight }
+          : null,
+      };
+    },
   });
 
   const pageRaw = results[0]?.result as {
     scrollHeight: number;
     viewportHeight: number;
     viewportWidth: number;
-    scrollY: number;
-    scrollX: number;
+    windowScrollY: number;
+    windowScrollX: number;
+    containerScrollTop: number;
     devicePixelRatio: number;
+    containerRect: { top: number; left: number; width: number; height: number } | null;
   } | undefined;
 
   if (!pageRaw) throw new Error('Could not read page dimensions');
 
-  const { scrollHeight, viewportHeight, viewportWidth, scrollX, scrollY: origY, devicePixelRatio } = pageRaw;
+  const {
+    scrollHeight, viewportHeight, viewportWidth,
+    windowScrollX, windowScrollY,
+    containerScrollTop,
+    devicePixelRatio,
+    containerRect,
+  } = pageRaw;
 
-  // Scroll to top
+  const useInnerScroller = !!containerRect;
+
+  // Scroll to top (container or window)
   await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => { window.scrollTo(0, 0); },
+    func: (inner: boolean) => {
+      if (inner) {
+        (document.querySelector('[data-sm-scroller]') as HTMLElement | null)?.scrollTo?.(0, 0)
+          ?? ((document.querySelector('[data-sm-scroller]') as HTMLElement | null)
+            && ((document.querySelector('[data-sm-scroller]') as HTMLElement).scrollTop = 0));
+      } else {
+        window.scrollTo(0, 0);
+      }
+    },
+    args: [useInnerScroller],
   });
   await sleep(250);
 
@@ -241,14 +303,21 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
 
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: (y: number) => { window.scrollTo(0, y); },
-      args: [actualY],
+      func: (y: number, inner: boolean) => {
+        if (inner) {
+          const el = document.querySelector('[data-sm-scroller]') as HTMLElement | null;
+          if (el) el.scrollTop = y;
+        } else {
+          window.scrollTo(0, y);
+        }
+      },
+      args: [actualY, useInnerScroller],
     });
     await sleep(scrollDelay);
 
-    // From the second slice onward, hide fixed/sticky elements so they don't
-    // repeat in every viewport screenshot and appear multiple times when stitched.
-    if (requestedY > 0 && !fixedHidden) {
+    // For window-scroll mode: hide fixed/sticky elements from the second slice onward
+    // so they don't repeat when stitched. For inner-scroller mode we crop them out anyway.
+    if (!useInnerScroller && requestedY > 0 && !fixedHidden) {
       await chrome.scripting.executeScript({
         target: { tabId },
         func: () => {
@@ -265,13 +334,16 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     }
 
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
-    sliceBlobs.push(await dataUrlToBlob(dataUrl));
+    const blob = containerRect
+      ? await cropToRect(dataUrl, containerRect, devicePixelRatio)
+      : await dataUrlToBlob(dataUrl);
+    sliceBlobs.push(blob);
     sliceMeta.push({ requestedY, actualY });
 
     requestedY += viewportHeight;
   }
 
-  // Restore fixed/sticky elements
+  // Restore fixed/sticky elements (window scroll mode only)
   if (fixedHidden) {
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -284,11 +356,17 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     });
   }
 
-  // Restore scroll
+  // Restore scroll positions and remove marker attribute
   await chrome.scripting.executeScript({
     target: { tabId },
-    func: (x: number, y: number) => { window.scrollTo(x, y); },
-    args: [scrollX, origY],
+    func: (wx: number, wy: number, containerTop: number, inner: boolean) => {
+      if (inner) {
+        const el = document.querySelector('[data-sm-scroller]') as HTMLElement | null;
+        if (el) { el.scrollTop = containerTop; el.removeAttribute('data-sm-scroller'); }
+      }
+      window.scrollTo(wx, wy);
+    },
+    args: [windowScrollX, windowScrollY, containerScrollTop, useInnerScroller],
   });
 
   const id = generateId();
@@ -365,6 +443,24 @@ async function handleRegionCaptured(rect: CropRect): Promise<void> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function cropToRect(
+  dataUrl: string,
+  rect: { top: number; left: number; width: number; height: number },
+  dpr: number,
+): Promise<Blob> {
+  const src = await dataUrlToBlob(dataUrl);
+  const bmp = await createImageBitmap(src);
+  const x = Math.round(rect.left * dpr);
+  const y = Math.round(rect.top * dpr);
+  const w = Math.round(rect.width * dpr);
+  const h = Math.round(rect.height * dpr);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bmp, x, y, w, h, 0, 0, w, h);
+  bmp.close();
+  return canvas.convertToBlob({ type: 'image/png' });
+}
 
 async function injectOverlay(tabId: number): Promise<void> {
   await chrome.scripting.insertCSS({
