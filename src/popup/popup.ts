@@ -38,23 +38,72 @@ async function getActiveTab(): Promise<{ tabId: number; windowId: number; url?: 
   return { tabId: tab.id, windowId: tab.windowId, url: tab.url };
 }
 
-function showRestrictedBanner(): void {
-  const banner = document.getElementById('restricted-banner') as HTMLDivElement;
-  banner.style.display = 'flex';
-  document.getElementById('btn-goto-record')?.addEventListener('click', () => {
-    switchPanel('record');
-    banner.style.display = 'none';
-  });
+// ─── Restricted-page popover ──────────────────────────────────────────────────
+
+let popoverDismissTimer: ReturnType<typeof setTimeout> | null = null;
+let popoverOutsideHandler: ((e: MouseEvent) => void) | null = null;
+
+function hideRestrictPopover(): void {
+  const popover = document.getElementById('restrict-popover') as HTMLElement;
+  popover.classList.remove('visible');
+  if (popoverDismissTimer) { clearTimeout(popoverDismissTimer); popoverDismissTimer = null; }
+  if (popoverOutsideHandler) { document.removeEventListener('click', popoverOutsideHandler); popoverOutsideHandler = null; }
 }
 
-const SCRIPTING_ACTIONS: PopupMessage['action'][] = ['captureFullPage', 'captureRegion', 'captureElement'];
+function showRestrictPopover(triggerEl: HTMLElement): void {
+  const popover = document.getElementById('restrict-popover') as HTMLElement;
+  const arrow = popover.querySelector<HTMLElement>('.restrict-popover-arrow')!;
+  const GAP = 8;
+  const popoverLeft = 12; // matches left:12px in CSS
 
-async function sendCapture(action: PopupMessage['action']): Promise<void> {
+  // Measure popover height off-screen before positioning
+  popover.style.top = '-9999px';
+  popover.style.visibility = 'hidden';
+  popover.classList.add('visible');
+  const popoverH = popover.offsetHeight;
+  popover.classList.remove('visible');
+  popover.style.visibility = '';
+
+  const rect = triggerEl.getBoundingClientRect();
+
+  // Flip above trigger if not enough room below
+  const flipUp = rect.bottom + GAP + popoverH > window.innerHeight;
+  popover.classList.toggle('flip-up', flipUp);
+
+  popover.style.top = flipUp
+    ? `${rect.top - GAP - popoverH}px`
+    : `${rect.bottom + GAP}px`;
+
+  // Center arrow on the trigger button
+  const arrowCenter = rect.left + rect.width / 2 - popoverLeft;
+  arrow.style.left = `${Math.max(10, Math.min(arrowCenter - 6, 280))}px`;
+
+  popover.classList.add('visible');
+
+  // Auto-dismiss after 5 s
+  if (popoverDismissTimer) clearTimeout(popoverDismissTimer);
+  popoverDismissTimer = setTimeout(hideRestrictPopover, 5000);
+
+  // Dismiss on any click outside the popover
+  if (popoverOutsideHandler) document.removeEventListener('click', popoverOutsideHandler);
+  popoverOutsideHandler = (e: MouseEvent) => {
+    if (!popover.contains(e.target as Node)) hideRestrictPopover();
+  };
+  // Delay one tick so the current click doesn't immediately dismiss it
+  setTimeout(() => document.addEventListener('click', popoverOutsideHandler!), 0);
+}
+
+document.getElementById('btn-popover-goto-record')?.addEventListener('click', () => {
+  hideRestrictPopover();
+  switchPanel('record');
+});
+
+async function sendCapture(action: PopupMessage['action'], triggerEl: HTMLElement): Promise<void> {
   const tab = await getActiveTab();
   if (!tab) return;
 
-  if (SCRIPTING_ACTIONS.includes(action) && isRestrictedUrl(tab.url)) {
-    showRestrictedBanner();
+  if (isRestrictedUrl(tab.url)) {
+    showRestrictPopover(triggerEl);
     return;
   }
 
@@ -66,10 +115,10 @@ async function sendCapture(action: PopupMessage['action']): Promise<void> {
   }).catch(() => {});
 }
 
-document.getElementById('btn-visible')?.addEventListener('click', () => sendCapture('captureVisible'));
-document.getElementById('btn-fullpage')?.addEventListener('click', () => sendCapture('captureFullPage'));
-document.getElementById('btn-region')?.addEventListener('click', () => sendCapture('captureRegion'));
-document.getElementById('btn-element')?.addEventListener('click', () => sendCapture('captureElement'));
+document.getElementById('btn-visible')?.addEventListener('click', (e) => sendCapture('captureVisible', e.currentTarget as HTMLElement));
+document.getElementById('btn-fullpage')?.addEventListener('click', (e) => sendCapture('captureFullPage', e.currentTarget as HTMLElement));
+document.getElementById('btn-region')?.addEventListener('click', (e) => sendCapture('captureRegion', e.currentTarget as HTMLElement));
+document.getElementById('btn-element')?.addEventListener('click', (e) => sendCapture('captureElement', e.currentTarget as HTMLElement));
 
 document.getElementById('btn-options')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
 document.getElementById('btn-library')?.addEventListener('click', () => {
