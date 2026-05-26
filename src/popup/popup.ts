@@ -28,8 +28,15 @@ document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach((btn) => {
 
 function isRestrictedUrl(url: string | undefined): boolean {
   if (!url) return true;
-  const restricted = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
-  return restricted.some((prefix) => url.startsWith(prefix));
+  const restrictedPrefixes = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
+  if (restrictedPrefixes.some((p) => url.startsWith(p))) return true;
+  // Chrome Web Store pages cannot be scripted by extensions
+  const restrictedHosts = ['chrome.google.com', 'chromewebstore.google.com'];
+  try {
+    const host = new URL(url).hostname;
+    if (restrictedHosts.includes(host)) return true;
+  } catch { /* invalid URL */ }
+  return false;
 }
 
 async function getActiveTab(): Promise<{ tabId: number; windowId: number; url?: string } | null> {

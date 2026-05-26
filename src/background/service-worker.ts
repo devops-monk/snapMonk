@@ -113,10 +113,28 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
   );
 }
 
+// ─── Restricted-URL guard ─────────────────────────────────────────────────────
+
+function isRestrictedUrl(url: string | undefined): boolean {
+  if (!url) return true;
+  const restrictedPrefixes = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
+  if (restrictedPrefixes.some((p) => url.startsWith(p))) return true;
+  const restrictedHosts = ['chrome.google.com', 'chromewebstore.google.com'];
+  try {
+    if (restrictedHosts.includes(new URL(url).hostname)) return true;
+  } catch { /* invalid URL */ }
+  return false;
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 async function dispatch(type: CaptureType, tabId: number, windowId: number): Promise<void> {
   try {
+    const tab = await chrome.tabs.get(tabId);
+    if (isRestrictedUrl(tab.url)) {
+      showBadgeError(tabId);
+      return;
+    }
     switch (type) {
       case 'visible':
         return await captureVisible(tabId, windowId);
