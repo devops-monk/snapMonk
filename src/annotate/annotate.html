@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapMonk — Annotate Image</title>
+  <link rel="stylesheet" href="./annotate.css">
+</head>
+<body>
+  <header class="an-header">
+    <img src="../../icons/icon32.png" width="24" height="24" alt="SnapMonk">
+    <div class="an-header-text">
+      <div class="an-brand">SnapMonk</div>
+      <div class="an-sub">by DevOps-Monk</div>
+    </div>
+  </header>
+
+  <main class="an-main">
+    <div id="drop-zone" class="drop-zone">
+      <svg class="drop-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+      </svg>
+      <p class="drop-title">Drop an image here to annotate</p>
+      <p class="drop-methods">You can upload an image with one of the following methods:</p>
+      <ul class="drop-list">
+        <li>Drag and drop an image file into this area</li>
+        <li>Click anywhere here to select an image from disk</li>
+        <li>Paste an image from your clipboard <kbd>Ctrl+V</kbd></li>
+      </ul>
+      <input id="file-input" type="file" accept="image/*" style="display:none">
+    </div>
+
+    <p id="an-error" class="an-error hidden"></p>
+  </main>
+
+  <script type="module" src="./annotate.ts"></script>
+</body>
+</html>

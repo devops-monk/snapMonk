@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapMonk — Recording Preview</title>
+  <link rel="stylesheet" href="./preview.css">
+</head>
+<body>
+  <div class="pv-page">
+
+    <!-- Video player -->
+    <div class="pv-player-wrap">
+      <video id="pv-video" class="pv-video" controls preload="auto"></video>
+      <div id="pv-loading" class="pv-loading">
+        <div class="pv-spinner"></div>
+        <span>Loading recording…</span>
+      </div>
+    </div>
+
+    <!-- Speed controls -->
+    <div class="pv-speed-bar">
+      <span class="pv-speed-label">Speed:</span>
+      <button class="pv-speed-btn" data-speed="0.5">0.5×</button>
+      <button class="pv-speed-btn active" data-speed="1">1×</button>
+      <button class="pv-speed-btn" data-speed="1.25">1.25×</button>
+      <button class="pv-speed-btn" data-speed="1.5">1.5×</button>
+      <button class="pv-speed-btn" data-speed="2">2×</button>
+    </div>
+
+    <!-- Info + Export row -->
+    <div class="pv-bottom">
+
+      <!-- Video Information -->
+      <div class="pv-card">
+        <div class="pv-card-title">Video Information:</div>
+        <div class="pv-info-row">
+          <span class="pv-info-label">Create Time:</span>
+          <span id="pv-create-time">—</span>
+        </div>
+        <div class="pv-info-row">
+          <span class="pv-info-label">Video Length:</span>
+          <span id="pv-duration">—</span>
+        </div>
+        <div class="pv-info-row">
+          <span class="pv-info-label">Video Size:</span>
+          <span id="pv-size">—</span>
+        </div>
+      </div>
+
+      <!-- Video Export -->
+      <div class="pv-card">
+        <div class="pv-card-title">Video Export:</div>
+        <div class="pv-fmt-row">
+          <button class="pv-fmt-btn active" data-fmt="webm">WEBM</button>
+          <button class="pv-fmt-btn" data-fmt="mp4">MP4</button>
+        </div>
+        <button id="pv-download-btn" class="pv-download-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+          </svg>
+          Download
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="./preview.ts"></script>
+</body>
+</html>

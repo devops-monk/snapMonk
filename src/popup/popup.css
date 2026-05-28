@@ -638,6 +638,112 @@ button { font-family: inherit; cursor: pointer; }
 
 .stop-btn:hover { background: #da3633; }
 
+/* ── Recording options box ──────────────────────────────────────────────── */
+.rec-options-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0 12px;
+  overflow: hidden;
+}
+
+.rec-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.rec-opt-row:last-child { border-bottom: none; }
+
+.rec-opt-icon { color: var(--muted); display: flex; align-items: center; flex-shrink: 0; }
+.rec-opt-icon svg { width: 15px; height: 15px; }
+
+.rec-opt-label { font-size: 12.5px; color: var(--text); flex: 1; }
+
+.rec-opt-select {
+  background: var(--raised);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+.rec-get-device-btn {
+  background: var(--raised);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.13s;
+  white-space: nowrap;
+}
+.rec-get-device-btn:hover { border-color: var(--purple); color: var(--purple); }
+
+/* ── Toggle label wrapper for recording options ─────────────────────────── */
+.rec-opt-toggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.rec-opt-toggle input[type="checkbox"] { display: none; }
+.rec-opt-toggle input:checked ~ .toggle-track {
+  background: var(--purple);
+  border-color: var(--purple);
+}
+.rec-opt-toggle input:checked ~ .toggle-track .toggle-thumb {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+.device-picker { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+
+.camera-preview {
+  width: 100%;
+  border-radius: 6px;
+  background: #000;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  max-height: 120px;
+}
+
+/* ── Countdown spinner ───────────────────────────────────────────────────── */
+.countdown-spin {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--raised);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-right: 6px;
+}
+.countdown-spin-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  width: 22px;
+  height: 24px;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s;
+}
+.countdown-spin-btn:hover { color: var(--text); }
+#countdown-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .footer {
   display: flex;

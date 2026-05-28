@@ -99,6 +99,18 @@
         </svg>
       </button>
 
+      <button class="cap-row" id="btn-annotate-image">
+        <div class="row-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+          </svg>
+        </div>
+        <span class="row-label">Annotate Local &amp; Clipboard Image</span>
+        <svg class="row-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+        </svg>
+      </button>
+
     </div>
 
   </div>
@@ -146,39 +158,78 @@
       <!-- Divider -->
       <div class="panel-divider"></div>
 
-      <!-- Toggles -->
-      <div class="toggles">
-        <label class="toggle-row">
-          <span class="toggle-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
-              <path stroke-linecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9A2.25 2.25 0 0 0 13.5 5.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/>
-            </svg>
-          </span>
-          <span class="toggle-label">Webcam overlay</span>
-          <input type="checkbox" id="opt-webcam" checked>
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        </label>
-        <label class="toggle-row">
-          <span class="toggle-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/>
-            </svg>
-          </span>
-          <span class="toggle-label">Microphone</span>
-          <input type="checkbox" id="opt-mic" checked>
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        </label>
-      </div>
+      <!-- Options box -->
+      <div class="rec-options-box">
 
-      <!-- Format selector -->
-      <div class="panel-divider"></div>
-      <div class="format-row">
-        <span class="format-label">Output format</span>
-        <div class="format-toggle">
-          <button class="fmt-btn active" data-format="webm">WebM</button>
-          <button class="fmt-btn" data-format="mp4">MP4</button>
+        <!-- REZ row -->
+        <div class="rec-opt-row">
+          <span class="rec-opt-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2" stroke-linecap="round" stroke-linejoin="round"/><text x="4" y="14" font-size="7" font-weight="700" fill="currentColor" stroke="none">HD</text></svg>
+          </span>
+          <span class="rec-opt-label">REZ</span>
+          <select id="opt-resolution" class="rec-opt-select">
+            <option value="480p">480p</option>
+            <option value="720p">720p</option>
+            <option value="1080p" selected>1080p</option>
+            <option value="2k">2K</option>
+            <option value="4k">4K</option>
+          </select>
         </div>
-      </div>
+
+        <!-- System Sound row (shown for tab/desktop modes) -->
+        <div class="rec-opt-row" id="row-system-sound">
+          <span class="rec-opt-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53L6.75 15.75H3.375A1.875 1.875 0 0 1 1.5 13.875v-3.75A1.875 1.875 0 0 1 3.375 8.25H6.75Z"/></svg>
+          </span>
+          <span class="rec-opt-label">System Sound</span>
+          <label class="rec-opt-toggle">
+            <input type="checkbox" id="opt-system-audio" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <!-- Countdown row -->
+        <div class="rec-opt-row">
+          <span class="rec-opt-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>
+          </span>
+          <span class="rec-opt-label">Countdown</span>
+          <div class="countdown-spin">
+            <button class="countdown-spin-btn" id="btn-countdown-down">−</button>
+            <span id="countdown-val">3</span>
+            <button class="countdown-spin-btn" id="btn-countdown-up">+</button>
+          </div>
+          <label class="rec-opt-toggle">
+            <input type="checkbox" id="opt-countdown" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <!-- Webcam overlay row -->
+        <div class="rec-opt-row" id="row-webcam">
+          <span class="rec-opt-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9A2.25 2.25 0 0 0 13.5 5.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+          </span>
+          <span class="rec-opt-label">Webcam overlay</span>
+          <label class="rec-opt-toggle">
+            <input type="checkbox" id="opt-webcam" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <!-- Mic toggle row -->
+        <div class="rec-opt-row">
+          <span class="rec-opt-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"/></svg>
+          </span>
+          <span class="rec-opt-label">Microphone</span>
+          <label class="rec-opt-toggle">
+            <input type="checkbox" id="opt-mic" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+      </div><!-- /rec-options-box -->
 
       <!-- Divider -->
       <div class="panel-divider"></div>

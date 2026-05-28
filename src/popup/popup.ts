@@ -1,4 +1,4 @@
-import type { PopupMessage, RecordingOptions, RecorderMessage, RecordingFormat } from '../utils/types';
+import type { PopupMessage, RecordingOptions, RecorderMessage, RecordingFormat, RecordingResolution } from '../utils/types';
 
 // ─── Wake service worker on popup open ───────────────────────────────────────
 // MV3 service workers go dormant between uses. Sending a ping immediately when
@@ -177,6 +177,8 @@ async function initRecordingUI() {
 
 let selectedMode: RecordingOptions['mode'] = 'tab';
 let selectedFormat: RecordingFormat = 'webm';
+let selectedResolution: RecordingResolution = '1080p';
+let countdownSeconds = 3;
 
 document.querySelectorAll<HTMLButtonElement>('.mode-card').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -184,16 +186,44 @@ document.querySelectorAll<HTMLButtonElement>('.mode-card').forEach((btn) => {
     document.querySelectorAll<HTMLButtonElement>('.mode-card').forEach((b) => {
       b.classList.toggle('active', b === btn);
     });
+    updateModeUI();
   });
 });
 
-document.querySelectorAll<HTMLButtonElement>('.fmt-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    selectedFormat = btn.dataset['format'] as RecordingFormat;
-    document.querySelectorAll<HTMLButtonElement>('.fmt-btn').forEach((b) => {
-      b.classList.toggle('active', b === btn);
-    });
-  });
+function updateModeUI() {
+  const systemSoundRow = document.getElementById('row-system-sound');
+  const webcamRow = document.getElementById('row-webcam');
+  const cameraRow = document.getElementById('row-camera');
+  // System sound only makes sense for screen capture modes
+  if (systemSoundRow) systemSoundRow.style.display = selectedMode === 'camera' ? 'none' : '';
+  // Webcam overlay only for screen capture
+  if (webcamRow) webcamRow.style.display = selectedMode === 'camera' ? 'none' : '';
+  // Camera device row always visible (needed for webcam overlay + camera mode)
+}
+
+(document.getElementById('opt-resolution') as HTMLSelectElement)?.addEventListener('change', (e) => {
+  selectedResolution = (e.target as HTMLSelectElement).value as RecordingResolution;
+});
+
+// ─── Countdown spinner ────────────────────────────────────────────────────────
+
+function updateCountdownDisplay() {
+  const el = document.getElementById('countdown-val');
+  if (el) el.textContent = String(countdownSeconds);
+}
+
+document.getElementById('btn-countdown-down')?.addEventListener('click', () => {
+  if (countdownSeconds > 1) { countdownSeconds--; updateCountdownDisplay(); }
+});
+document.getElementById('btn-countdown-up')?.addEventListener('click', () => {
+  if (countdownSeconds < 10) { countdownSeconds++; updateCountdownDisplay(); }
+});
+
+// ─── Annotate local / clipboard image ────────────────────────────────────────
+
+document.getElementById('btn-annotate-image')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('src/annotate/annotate.html') });
+  window.close();
 });
 
 // ─── Start recording ──────────────────────────────────────────────────────────
@@ -213,15 +243,20 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
 
   const tab = { tabId: activeTab.id, windowId: activeTab.windowId };
 
+  const countdownEnabled = (document.getElementById('opt-countdown') as HTMLInputElement).checked;
   const options: RecordingOptions = {
     mode: selectedMode,
     webcam: (document.getElementById('opt-webcam') as HTMLInputElement).checked,
     mic: (document.getElementById('opt-mic') as HTMLInputElement).checked,
     format: selectedFormat,
+    resolution: selectedResolution,
+    systemAudio: (document.getElementById('opt-system-audio') as HTMLInputElement).checked,
+    countdownSeconds: countdownEnabled ? countdownSeconds : 0,
   };
 
+  const startTime = Date.now();
   await chrome.storage.local.set({
-    [STORAGE_KEY]: { active: true, startTime: Date.now(), tabId: tab.tabId } satisfies RecordingState,
+    [STORAGE_KEY]: { active: true, startTime, tabId: tab.tabId } satisfies RecordingState,
   });
 
   try {
@@ -234,10 +269,10 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
       files: ['src/recorder/recorder-toolbar.js'],
     });
 
-    const msg: RecorderMessage = { action: 'beginRecording', options };
+    const msg: RecorderMessage = { action: 'beginRecording', options, startTime };
     await chrome.tabs.sendMessage(tab.tabId, msg);
 
-    showActiveRecording(Date.now());
+    showActiveRecording(startTime);
   } catch (err) {
     await chrome.storage.local.remove(STORAGE_KEY);
     console.error('[SnapMonk] Recording start failed:', err);
@@ -247,12 +282,18 @@ document.getElementById('btn-record-start')?.addEventListener('click', async () 
 // ─── Stop recording from popup ────────────────────────────────────────────────
 
 document.getElementById('btn-record-stop')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-record-stop') as HTMLButtonElement;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Stopping…';
+
   const stored = await chrome.storage.local.get(STORAGE_KEY) as Record<string, RecordingState>;
   const state = stored[STORAGE_KEY] as RecordingState | undefined;
-  if (!state?.tabId) return;
+  if (!state?.tabId) { btn.disabled = false; return; }
 
   try {
-    await chrome.tabs.update(state.tabId, { active: true });
+    // Do NOT call tabs.update here — switching tabs closes the popup mid-await,
+    // which silently drops the sendMessage call and requires a second click.
     await chrome.tabs.sendMessage(state.tabId, { action: 'stopRecording' });
   } catch {
     await chrome.storage.local.remove(STORAGE_KEY);
@@ -272,3 +313,4 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 initRecordingUI();
+updateModeUI();

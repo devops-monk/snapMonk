@@ -1,5 +1,3 @@
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import type { RecorderMessage, RecordingOptions } from '../utils/types';
 
 // Guard: only inject once
@@ -18,6 +16,8 @@ interface RecorderState {
   audioCtx: AudioContext | null;
   chunks: Blob[];
   startTime: number;
+  pausedAt: number;
+  totalPausedMs: number;
   timerInterval: ReturnType<typeof setInterval> | null;
   isPaused: boolean;
   options: RecordingOptions | null;
@@ -31,6 +31,8 @@ const rec: RecorderState = {
   audioCtx: null,
   chunks: [],
   startTime: 0,
+  pausedAt: 0,
+  totalPausedMs: 0,
   timerInterval: null,
   isPaused: false,
   options: null,
@@ -41,7 +43,7 @@ const rec: RecorderState = {
 function initRecorder() {
   chrome.runtime.onMessage.addListener((msg: RecorderMessage, _sender, sendResponse) => {
     if (msg.action === 'beginRecording' && msg.options) {
-      startRecording(msg.options)
+      startRecording(msg.options, msg.startTime)
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;
@@ -55,25 +57,45 @@ function initRecorder() {
 
 // ─── Start Recording ──────────────────────────────────────────────────────────
 
-async function startRecording(options: RecordingOptions): Promise<void> {
+async function startRecording(options: RecordingOptions, passedStartTime?: number): Promise<void> {
   rec.options = options;
 
   // Request mic and webcam BEFORE the countdown and screen picker so that:
   // 1. The user gesture from "Start Recording" is still live for getUserMedia
   // 2. The webcam bubble can appear immediately once recording begins
   // 3. Permission failures surface before we enter the countdown
+  // Resolution → pixel dimensions
+  const RES_MAP: Record<string, { w: number; h: number }> = {
+    '480p': { w: 854, h: 480 },
+    '720p': { w: 1280, h: 720 },
+    '1080p': { w: 1920, h: 1080 },
+    '2k': { w: 2560, h: 1440 },
+    '4k': { w: 3840, h: 2160 },
+  };
+  const resDims = RES_MAP[options.resolution ?? '1080p'] ?? { w: 1920, h: 1080 };
+
   if (options.mic) {
     try {
-      rec.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const micConstraints: MediaStreamConstraints = {
+        audio: options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : true,
+        video: false,
+      };
+      rec.micStream = await navigator.mediaDevices.getUserMedia(micConstraints);
     } catch {
       rec.micStream = null;
     }
   }
 
-  if (options.webcam) {
+  if (options.webcam || options.mode === 'camera') {
     try {
+      const camConstraints: MediaTrackConstraints = {
+        width: { ideal: resDims.w },
+        height: { ideal: resDims.h },
+        facingMode: options.mode === 'camera' ? 'user' : 'user',
+        ...(options.cameraDeviceId ? { deviceId: { exact: options.cameraDeviceId } } : {}),
+      };
       rec.webcamStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 320, facingMode: 'user' },
+        video: camConstraints,
         audio: false,
       });
     } catch {
@@ -81,32 +103,48 @@ async function startRecording(options: RecordingOptions): Promise<void> {
     }
   }
 
-  await showCountdown(3);
+  if (options.countdownSeconds > 0) {
+    await showCountdown(options.countdownSeconds);
+  }
 
-  // Map the user's mode choice to Chrome's displaySurface hint so the picker
-  // pre-selects the right source. 'monitor' (desktop) lets the user switch
-  // tabs freely; 'browser' (tab) only captures the specific tab chosen.
-  const displaySurface = options.mode === 'tab' ? 'browser'
-    : options.mode === 'window' ? 'window'
-    : 'monitor';
-
-  try {
-    rec.screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        frameRate: { ideal: 30, max: 60 },
-        width: { ideal: screen.width },
-        height: { ideal: screen.height },
-        displaySurface,
-      } as MediaTrackConstraints,
-      audio: true,
-    });
-  } catch {
-    // User cancelled — clean up any streams already acquired
-    rec.micStream?.getTracks().forEach((t) => t.stop());
-    rec.webcamStream?.getTracks().forEach((t) => t.stop());
-    rec.micStream = null;
+  // Camera-only mode — record directly from webcam, no screen capture needed
+  if (options.mode === 'camera') {
+    if (!rec.webcamStream) {
+      rec.micStream?.getTracks().forEach(t => t.stop());
+      rec.micStream = null;
+      return;
+    }
+    rec.screenStream = rec.webcamStream;
     rec.webcamStream = null;
-    return;
+  } else {
+    // Map the user's mode choice to Chrome's displaySurface hint
+    const displaySurface = options.mode === 'tab' ? 'browser'
+      : options.mode === 'window' ? 'window'
+      : 'monitor';
+
+    try {
+      rec.screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          frameRate: { ideal: 30, max: 60 },
+          width: { ideal: resDims.w },
+          height: { ideal: resDims.h },
+          displaySurface,
+        } as MediaTrackConstraints,
+        audio: options.systemAudio !== false,
+        // Include the calling tab in the picker (hidden by default to avoid mirror loops)
+        // and hint Chrome to pre-select it when in tab mode
+        ...(options.mode === 'tab' ? {
+          preferCurrentTab: true,
+          selfBrowserSurface: 'include',
+        } : {}),
+      } as DisplayMediaStreamOptions);
+    } catch {
+      rec.micStream?.getTracks().forEach((t) => t.stop());
+      rec.webcamStream?.getTracks().forEach((t) => t.stop());
+      rec.micStream = null;
+      rec.webcamStream = null;
+      return;
+    }
   }
 
   rec.screenStream.getVideoTracks()[0]?.addEventListener('ended', () => stopRecording());
@@ -116,14 +154,14 @@ async function startRecording(options: RecordingOptions): Promise<void> {
     injectWebcamBubble(rec.webcamStream);
   }
 
-  // MediaRecorder only records the first audio track it finds, so we must mix
-  // all audio sources (system + mic) into a single track via AudioContext.
-  // latencyHint: 'playback' uses larger buffers — reduces audio dropouts vs default.
+  // Mix all audio sources into a single track via AudioContext.
   rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
   const mixDest = rec.audioCtx.createMediaStreamDestination();
 
-  for (const track of rec.screenStream.getAudioTracks()) {
-    rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+  if (options.systemAudio !== false) {
+    for (const track of rec.screenStream.getAudioTracks()) {
+      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+    }
   }
   if (rec.micStream) {
     for (const track of rec.micStream.getAudioTracks()) {
@@ -136,7 +174,7 @@ async function startRecording(options: RecordingOptions): Promise<void> {
     ...mixDest.stream.getAudioTracks(),
   ]);
 
-  const mimeType = getSupportedMimeType(options.format === 'mp4');
+  const mimeType = getSupportedMimeType(true);
   rec.chunks = [];
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -149,7 +187,9 @@ async function startRecording(options: RecordingOptions): Promise<void> {
   // 250ms chunks — smaller slices prevent audio gaps from buffer underruns
   rec.mediaRecorder.start(250);
 
-  rec.startTime = Date.now();
+  rec.startTime = passedStartTime ?? Date.now();
+  rec.pausedAt = 0;
+  rec.totalPausedMs = 0;
   rec.isPaused = false;
   injectToolbar();
 }
@@ -186,85 +226,41 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  const format = rec.options?.format ?? 'webm';
-  const mimeType = getSupportedMimeType(format === 'mp4');
+  const mimeType = getSupportedMimeType(true);
   const blob = new Blob(rec.chunks, { type: mimeType });
 
   releaseStreams();
   resetRecState();
 
-  if (format === 'mp4') {
-    if (mimeType.startsWith('video/mp4')) {
-      // Recorded natively as MP4 — download directly, no conversion needed.
-      triggerDownload(blob, `snapmonk-recording-${formatTimestamp()}.mp4`);
-      notifyBackground('recordingStopped');
-    } else {
-      // Recorded as WebM (H.264) — remux to MP4 container via ffmpeg.
-      await convertAndDownloadMp4(blob);
-    }
-  } else {
-    triggerDownload(blob, `snapmonk-recording-${formatTimestamp()}.webm`);
-    notifyBackground('recordingStopped');
+  // openPreviewPage sends the recording to the background, which stores it in
+  // the extension's IndexedDB and opens the preview tab. It also clears the
+  // recording state (replaces the separate recordingStopped notification).
+  await openPreviewPage(blob, mimeType);
+}
+
+async function openPreviewPage(blob: Blob, mimeType: string) {
+  const durationSecs = rec.startTime > 0
+    ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000
+    : 0;
+  const arrayBuffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  // Base64-encode in chunks — strings survive Chrome's extension IPC (JSON-based)
+  // intact; raw TypedArrays get mangled into plain objects on the receiving end.
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
+  const base64 = btoa(binary);
+  chrome.runtime.sendMessage({
+    action: 'saveRecording',
+    base64,
+    mimeType,
+    createdAt: Date.now(),
+    duration: durationSecs,
+  }).catch(() => {});
 }
 
-async function convertAndDownloadMp4(webmBlob: Blob) {
-  const overlay = showConvertingOverlay();
-  try {
-    const ffmpeg = new FFmpeg();
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
-    // -c copy remuxes without re-encoding (fast). Works when source is H.264,
-    // which is what getSupportedMimeType picks when MP4 is the target format.
-    await ffmpeg.exec(['-i', 'input.webm', '-c', 'copy', '-movflags', '+faststart', 'output.mp4']);
-    const data = await ffmpeg.readFile('output.mp4') as Uint8Array;
-    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
-    triggerDownload(mp4Blob, `snapmonk-recording-${formatTimestamp()}.mp4`);
-  } catch (err) {
-    console.error('[SnapMonk] MP4 conversion failed, saving as WebM:', err);
-    triggerDownload(webmBlob, `snapmonk-recording-${formatTimestamp()}.webm`);
-  } finally {
-    overlay.remove();
-    notifyBackground('recordingStopped');
-  }
-}
-
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
-function showConvertingOverlay(): HTMLDivElement {
-  const el = document.createElement('div');
-  el.id = 'sm-converting';
-  Object.assign(el.style, {
-    position: 'fixed', inset: '0', zIndex: '2147483647',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.75)', color: '#fff',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontSize: '16px', gap: '12px',
-  });
-  el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="animation:sm-spin 1s linear infinite">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
-    </svg>
-    <span>Converting to MP4…</span>
-    <span style="font-size:12px;opacity:0.6;">This may take a moment</span>
-    <style>@keyframes sm-spin{to{transform:rotate(360deg)}}</style>
-  `;
-  document.body.appendChild(el);
-  return el;
-}
 
 function resetRecState() {
   rec.mediaRecorder = null;
@@ -327,7 +323,12 @@ function injectToolbar() {
     </svg>
     Stop & Save
   `;
-  stopBtn.addEventListener('click', stopRecording);
+  stopBtn.addEventListener('click', () => {
+    if (stopBtn.disabled) return;
+    stopBtn.disabled = true;
+    stopBtn.textContent = 'Stopping…';
+    stopRecording();
+  });
 
   // Logo
   const logo = document.createElement('span');
@@ -339,14 +340,13 @@ function injectToolbar() {
   document.body.appendChild(root);
 
   // Start timer
+  clearInterval(rec.timerInterval ?? 0);
   rec.timerInterval = setInterval(() => {
-    if (!rec.isPaused) {
-      const elapsed = Math.floor((Date.now() - rec.startTime) / 1000);
-      const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-      const secs = String(elapsed % 60).padStart(2, '0');
-      const timerEl = document.getElementById('sm-rec-timer');
-      if (timerEl) timerEl.textContent = `${mins}:${secs}`;
-    }
+    const elapsed = Math.floor((Date.now() - rec.startTime - rec.totalPausedMs) / 1000);
+    const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const secs = String(elapsed % 60).padStart(2, '0');
+    const timerEl = document.getElementById('sm-rec-timer');
+    if (timerEl) timerEl.textContent = `${mins}:${secs}`;
   }, 500);
 }
 
@@ -357,7 +357,11 @@ function togglePause() {
   if (rec.isPaused) {
     rec.mediaRecorder.resume();
     rec.isPaused = false;
-    rec.startTime = Date.now() - (rec.mediaRecorder.state === 'recording' ? 0 : 0);
+    // Accumulate the time we were paused so elapsed time stays accurate
+    if (rec.pausedAt > 0) {
+      rec.totalPausedMs += Date.now() - rec.pausedAt;
+      rec.pausedAt = 0;
+    }
     btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
         <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
@@ -367,6 +371,7 @@ function togglePause() {
   } else {
     rec.mediaRecorder.pause();
     rec.isPaused = true;
+    rec.pausedAt = Date.now();
     const dot = document.querySelector('.sm-rec-dot') as HTMLElement;
     if (dot) dot.style.animationPlayState = 'paused';
     btn.innerHTML = `

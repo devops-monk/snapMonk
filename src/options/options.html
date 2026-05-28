@@ -21,8 +21,6 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="general">General</button>
     <button class="tab-btn" data-tab="shortcuts">Shortcuts</button>
-    <button class="tab-btn" data-tab="integrations">Integrations</button>
-    <button class="tab-btn" data-tab="ai">AI</button>
     <button class="tab-btn" data-tab="library">My Captures</button>
     <button class="tab-btn" data-tab="about">About</button>
   </div>
@@ -75,7 +73,7 @@
           <span>Add "SnapMonk by DevOps-Monk" to exports</span>
         </div>
         <label class="toggle">
-          <input type="checkbox" id="pref-watermark" checked>
+          <input type="checkbox" id="pref-watermark">
           <div class="toggle-track"></div>
         </label>
       </div>
@@ -152,177 +150,6 @@
     <p style="font-size:12px;color:#8B949E;margin-top:12px;">
       To change extension keyboard shortcuts, visit <a href="chrome://extensions/shortcuts" style="color:#7C3AED;" onclick="return false;" id="link-shortcuts">chrome://extensions/shortcuts</a>
     </p>
-  </div>
-
-  <!-- Integrations Tab -->
-  <div id="tab-integrations" style="display:none;">
-
-    <!-- GitHub -->
-    <div class="settings-group">
-      <div class="settings-group-title">🐙 GitHub</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Personal Access Token</label>
-          <span>Needs <code>repo</code> scope to upload screenshots and post comments</span>
-        </div>
-        <input type="password" id="int-github-token" class="int-input" placeholder="ghp_…" autocomplete="off">
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Default Repository</label>
-          <span>Pre-fills the repo field in the Share panel (owner/repo)</span>
-        </div>
-        <input type="text" id="int-github-repo" class="int-input" placeholder="myorg/myrepo">
-      </div>
-      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
-        <span id="int-github-status" class="int-status"></span>
-        <button id="int-github-validate" class="int-validate-btn">Validate Token</button>
-      </div>
-    </div>
-
-    <!-- Jira -->
-    <div class="settings-group">
-      <div class="settings-group-title">🔵 Jira</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Jira Instance URL</label>
-          <span>Your Jira Cloud URL, e.g. https://mycompany.atlassian.net</span>
-        </div>
-        <input type="url" id="int-jira-url" class="int-input" placeholder="https://mycompany.atlassian.net">
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Atlassian Account Email</label>
-          <span>The email address you use to log into Jira</span>
-        </div>
-        <input type="email" id="int-jira-email" class="int-input" placeholder="you@company.com">
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>API Token</label>
-          <span>Generate at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" style="color:#7C3AED;">id.atlassian.com</a></span>
-        </div>
-        <input type="password" id="int-jira-token" class="int-input" placeholder="ATATT…" autocomplete="off">
-      </div>
-      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
-        <span id="int-jira-status" class="int-status"></span>
-        <button id="int-jira-validate" class="int-validate-btn">Validate Credentials</button>
-      </div>
-    </div>
-
-    <!-- Slack -->
-    <div class="settings-group">
-      <div class="settings-group-title">💬 Slack</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Bot Token</label>
-          <span>OAuth token starting with <code>xoxb-</code>. Needs <code>files:write</code> and <code>channels:read</code> scopes.</span>
-        </div>
-        <input type="password" id="int-slack-token" class="int-input" placeholder="xoxb-…" autocomplete="off">
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Default Channel</label>
-          <span>Pre-fills the channel field in the Share panel (e.g. #bugs)</span>
-        </div>
-        <input type="text" id="int-slack-channel" class="int-input" placeholder="#bugs">
-      </div>
-      <div class="setting-row" style="justify-content:flex-end;gap:10px;">
-        <span id="int-slack-status" class="int-status"></span>
-        <button id="int-slack-validate" class="int-validate-btn">Validate Token</button>
-      </div>
-    </div>
-
-    <div class="settings-group" style="background:none;border:none;padding:0;">
-      <button id="int-save-all" style="width:100%;padding:10px;background:#7C3AED;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">
-        Save All Integration Settings
-      </button>
-      <p id="int-save-feedback" style="text-align:center;font-size:12px;margin-top:8px;min-height:18px;color:#10B981;"></p>
-    </div>
-
-  </div>
-
-  <!-- AI Tab -->
-  <div id="tab-ai" style="display:none;">
-
-    <div class="settings-group">
-      <div class="settings-group-title">AI Provider</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Select Provider</label>
-          <span>Choose which AI analyses your screenshots to generate bug reports</span>
-        </div>
-        <select id="ai-provider">
-          <option value="gemini">Gemini Flash 2.0 (Free tier)</option>
-          <option value="groq">Groq LLaMA 4 (Free tier)</option>
-          <option value="openai">GPT-4o-mini (Paid)</option>
-          <option value="ollama">Ollama (Local — Free)</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Gemini settings -->
-    <div class="settings-group ai-provider-section" id="ai-section-gemini">
-      <div class="settings-group-title">🟦 Google Gemini</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>API Key</label>
-          <span>Free tier: 1,500 req/day, 1M tokens/day. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#7C3AED;">aistudio.google.com</a></span>
-        </div>
-        <input type="password" id="ai-gemini-key" class="int-input" placeholder="AIza…" autocomplete="off">
-      </div>
-    </div>
-
-    <!-- Groq settings -->
-    <div class="settings-group ai-provider-section" id="ai-section-groq" style="display:none;">
-      <div class="settings-group-title">🟥 Groq</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>API Key</label>
-          <span>Free tier: 14,400 req/day with LLaMA 4 vision. Get one at <a href="https://console.groq.com/keys" target="_blank" style="color:#7C3AED;">console.groq.com</a></span>
-        </div>
-        <input type="password" id="ai-groq-key" class="int-input" placeholder="gsk_…" autocomplete="off">
-      </div>
-    </div>
-
-    <!-- OpenAI settings -->
-    <div class="settings-group ai-provider-section" id="ai-section-openai" style="display:none;">
-      <div class="settings-group-title">🟩 OpenAI</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>API Key</label>
-          <span>GPT-4o-mini with vision. ~$0.003 per screenshot analysis. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#7C3AED;">platform.openai.com</a></span>
-        </div>
-        <input type="password" id="ai-openai-key" class="int-input" placeholder="sk-…" autocomplete="off">
-      </div>
-    </div>
-
-    <!-- Ollama settings -->
-    <div class="settings-group ai-provider-section" id="ai-section-ollama" style="display:none;">
-      <div class="settings-group-title">🟣 Ollama (Local)</div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Ollama URL</label>
-          <span>URL where Ollama is running. Default: http://localhost:11434</span>
-        </div>
-        <input type="url" id="ai-ollama-url" class="int-input" placeholder="http://localhost:11434">
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Vision Model</label>
-          <span>A vision-capable model you've pulled. E.g. <code>llava</code>, <code>llava:13b</code>, <code>bakllava</code></span>
-        </div>
-        <input type="text" id="ai-ollama-model" class="int-input" placeholder="llava">
-      </div>
-    </div>
-
-    <div class="settings-group" style="background:none;border:none;padding:0;">
-      <button id="ai-save" style="width:100%;padding:10px;background:linear-gradient(135deg,#7C3AED,#4285F4);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">
-        Save AI Settings
-      </button>
-      <p id="ai-save-feedback" style="text-align:center;font-size:12px;margin-top:8px;min-height:18px;color:#10B981;"></p>
-    </div>
-
   </div>
 
   <!-- Library Tab -->

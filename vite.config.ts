@@ -9,6 +9,8 @@ export default defineConfig({
       manifest: './manifest.json',
       additionalInputs: [
         'src/editor/editor.html',
+        'src/annotate/annotate.html',
+        'src/preview/preview.html',
         'src/content/overlay.ts',
         'src/content/overlay.css',
         'src/recorder/recorder-toolbar.ts',

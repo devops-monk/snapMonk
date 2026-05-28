@@ -1,0 +1,174 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --border: #2a2a4a;
+  --purple: #7c5cbf;
+  --purple-hover: #6a4daa;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --radius: 8px;
+}
+
+html, body {
+  width: 280px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+.dp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.dp-header img { border-radius: 5px; flex-shrink: 0; }
+.dp-header-text { display: flex; flex-direction: column; line-height: 1.2; }
+.dp-brand { font-weight: 700; font-size: 14px; color: var(--text); }
+.dp-wants { font-size: 11px; color: var(--text-muted); }
+
+/* ─── Permissions list ───────────────────────────────────────────── */
+.dp-permissions {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.dp-perm-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.dp-perm-row svg { flex-shrink: 0; }
+.dp-perm-row.granted { color: var(--green); }
+.dp-perm-row.denied { color: var(--red); }
+
+/* ─── Camera preview ─────────────────────────────────────────────── */
+.dp-preview-wrap {
+  position: relative;
+  margin: 10px 14px 8px;
+  height: 100px;
+  background: #0a0a1a;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.dp-preview-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+.dp-preview-wrap video.active { display: block; }
+.dp-permission-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.dp-permission-msg.hidden { display: none; }
+
+/* ─── Fields ─────────────────────────────────────────────────────── */
+.dp-field {
+  padding: 0 14px 8px;
+}
+.dp-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.dp-select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='m19 9-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px;
+  padding-right: 28px;
+}
+.dp-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.dp-select:focus { border-color: var(--purple); }
+
+/* ─── Mic level ──────────────────────────────────────────────────── */
+.dp-mic-wrap {
+  padding: 0 14px 8px;
+}
+.dp-mic-level-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dp-mic-level-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.08s ease;
+}
+
+/* ─── Action buttons ─────────────────────────────────────────────── */
+.dp-actions {
+  padding: 8px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+}
+.dp-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.dp-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.dp-btn-primary {
+  background: var(--purple);
+  color: #fff;
+}
+.dp-btn-primary:not(:disabled):hover { background: var(--purple-hover); }
+.dp-btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.dp-btn-secondary:not(:disabled):hover { border-color: var(--purple); color: var(--purple); }
+.dp-btn-danger {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.dp-btn-danger:hover { color: var(--red); border-color: var(--red); }

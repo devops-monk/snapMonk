@@ -1,4 +1,4 @@
-import { saveCapture, dataUrlToBlob, generateId } from '../utils/db';
+import { saveCapture, dataUrlToBlob, generateId, savePendingRecording } from '../utils/db';
 import type {
   CaptureRecord,
   PageInfo,
@@ -85,11 +85,34 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
     return;
   }
 
+  const action = (msg as { action: string }).action;
+
+  // Content script sends the finished recording blob here; we store it in the
+  // extension's IndexedDB (same origin as preview.html) then open the preview.
+  if (action === 'saveRecording') {
+    const m = msg as { base64: string; mimeType: string; createdAt: number; duration: number };
+    const binary = atob(m.base64);
+    const uint8 = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) uint8[i] = binary.charCodeAt(i);
+    const blob = new Blob([uint8], { type: m.mimeType });
+    await savePendingRecording({ blob, mimeType: m.mimeType, createdAt: m.createdAt, duration: m.duration });
+    await chrome.storage.local.remove('snapmonk_recording_state');
+    const url = chrome.runtime.getURL('src/preview/preview.html');
+    await chrome.tabs.create({ url });
+    return;
+  }
+
   // When the recorder toolbar finishes (or errors), clear the recording state
   // so the popup shows the correct UI even if it was closed during recording.
-  const action = (msg as { action: string }).action;
   if (action === 'recordingStopped' || action === 'recordingError') {
     await chrome.storage.local.remove('snapmonk_recording_state');
+    return;
+  }
+
+  // Legacy: direct openPreviewPage request (kept as fallback)
+  if (action === 'openPreviewPage') {
+    const url = chrome.runtime.getURL('src/preview/preview.html');
+    await chrome.tabs.create({ url });
     return;
   }
 

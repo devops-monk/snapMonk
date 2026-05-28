@@ -67,19 +67,34 @@ export type BackgroundMessage = RegionSelectedMessage | ElementSelectedMessage;
 
 // ─── Recording ───────────────────────────────────────────────────────────────
 
-export type RecordingMode = 'tab' | 'desktop' | 'window';
+export type RecordingMode = 'tab' | 'desktop' | 'window' | 'camera';
 export type RecordingFormat = 'webm' | 'mp4';
+export type RecordingResolution = '480p' | '720p' | '1080p' | '2k' | '4k';
 
 export interface RecordingOptions {
   mode: RecordingMode;
   webcam: boolean;
   mic: boolean;
   format: RecordingFormat;
+  resolution: RecordingResolution;
+  systemAudio: boolean;
+  countdownSeconds: number;
+  cameraDeviceId?: string;
+  micDeviceId?: string;
 }
 
 export interface RecorderMessage {
   action: 'beginRecording' | 'stopRecording';
   options?: RecordingOptions;
+  startTime?: number;
+}
+
+export interface PendingRecording {
+  id: string;
+  blob: Blob;
+  mimeType: string;
+  createdAt: number;
+  duration: number;
 }
 
 export interface RecordingStateMessage {

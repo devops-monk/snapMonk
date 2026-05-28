@@ -1,0 +1,192 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #1a1a1a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Page wrapper ─────────────────────────────────────────────────────────── */
+.pv-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Video player ─────────────────────────────────────────────────────────── */
+.pv-player-wrap {
+  flex: 1;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.pv-video {
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 220px);
+  display: none;
+  background: #000;
+}
+.pv-video.visible { display: block; }
+
+.pv-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #64748b;
+  font-size: 14px;
+  background: #000;
+}
+.pv-loading.hidden { display: none; }
+
+.pv-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid #334155;
+  border-top-color: #4f7ef8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Speed bar ────────────────────────────────────────────────────────────── */
+.pv-speed-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #222;
+  border-top: 1px solid #333;
+}
+
+.pv-speed-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.pv-speed-btn {
+  padding: 4px 10px;
+  background: #2e2e2e;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.pv-speed-btn:hover:not(.active) { border-color: #4f7ef8; color: #e2e8f0; }
+.pv-speed-btn.active {
+  background: #4f7ef8;
+  border-color: #4f7ef8;
+  color: #fff;
+}
+
+/* ── Bottom row ───────────────────────────────────────────────────────────── */
+.pv-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #2a2a2a;
+  border-top: 1px solid #3a3a3a;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+.pv-card {
+  padding: 20px 28px;
+}
+.pv-card:first-child {
+  border-right: 1px solid #3a3a3a;
+}
+
+.pv-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 14px;
+}
+
+.pv-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #94a3b8;
+}
+.pv-info-label {
+  min-width: 110px;
+  color: #94a3b8;
+}
+.pv-info-row span:last-child {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+/* ── Format buttons ───────────────────────────────────────────────────────── */
+.pv-fmt-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pv-fmt-btn {
+  flex: 1;
+  padding: 9px 0;
+  background: #3a3a3a;
+  border: 1px solid #4a4a4a;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.pv-fmt-btn:hover:not(.active) { border-color: #4f7ef8; color: #e2e8f0; }
+.pv-fmt-btn.active {
+  background: #4f7ef8;
+  border-color: #4f7ef8;
+  color: #fff;
+}
+
+/* ── Download button ──────────────────────────────────────────────────────── */
+.pv-download-btn {
+  width: 100%;
+  padding: 13px 0;
+  background: #4f7ef8;
+  border: none;
+  border-radius: 7px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+.pv-download-btn:hover { background: #3b6de8; }
+.pv-download-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .pv-bottom { grid-template-columns: 1fr; }
+  .pv-card:first-child { border-right: none; border-bottom: 1px solid #3a3a3a; }
+}

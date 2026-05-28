@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb';
-import type { CaptureRecord } from './types';
+import type { CaptureRecord, PendingRecording } from './types';
 
 interface SnapMonkSchema extends DBSchema {
   captures: {
@@ -7,19 +7,28 @@ interface SnapMonkSchema extends DBSchema {
     value: CaptureRecord;
     indexes: { by_timestamp: number };
   };
+  recordings: {
+    key: string;
+    value: PendingRecording;
+  };
 }
 
 const DB_NAME = 'snapmonk-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let _db: IDBPDatabase<SnapMonkSchema> | null = null;
 
 async function getDB(): Promise<IDBPDatabase<SnapMonkSchema>> {
   if (_db) return _db;
   _db = await openDB<SnapMonkSchema>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const store = db.createObjectStore('captures', { keyPath: 'id' });
-      store.createIndex('by_timestamp', 'metadata.timestamp');
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        const store = db.createObjectStore('captures', { keyPath: 'id' });
+        store.createIndex('by_timestamp', 'metadata.timestamp');
+      }
+      if (oldVersion < 2) {
+        db.createObjectStore('recordings', { keyPath: 'id' });
+      }
     },
   });
   return _db;
@@ -56,4 +65,23 @@ export function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 
 export function generateId(): string {
   return crypto.randomUUID();
+}
+
+// ─── Pending recording (IndexedDB — no size limit, stores Blob natively) ──────
+
+const PENDING_REC_KEY = 'pending';
+
+export async function savePendingRecording(entry: Omit<PendingRecording, 'id'>): Promise<void> {
+  const db = await getDB();
+  await db.put('recordings', { ...entry, id: PENDING_REC_KEY });
+}
+
+export async function getPendingRecording(): Promise<PendingRecording | undefined> {
+  const db = await getDB();
+  return db.get('recordings', PENDING_REC_KEY);
+}
+
+export async function deletePendingRecording(): Promise<void> {
+  const db = await getDB();
+  await db.delete('recordings', PENDING_REC_KEY);
 }

@@ -13,19 +13,20 @@ import {
 } from 'fabric';
 import { getCapture } from '../utils/db';
 import type { CaptureRecord, PageInfo, SliceMeta } from '../utils/types';
-import { initSharePanel } from '../integrations/share-panel';
-import { initBugReportPanel } from '../ai/bug-report-panel';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-type Tool = 'select' | 'arrow' | 'line' | 'rect' | 'circle' | 'text' | 'pen' | 'callout' | 'highlight' | 'blur' | 'redact' | 'step' | 'crop';
+type Tool = 'select' | 'arrow' | 'line' | 'rect' | 'circle' | 'text' | 'pen' | 'callout' | 'highlight' | 'blur' | 'redact' | 'step' | 'crop' | 'emoji' | 'add-img';
 
 const state = {
   tool: 'select' as Tool,
   color: '#F85149',
   strokeWidth: 3,
   fontSize: 20,
+  fontFamily: 'system-ui, -apple-system, sans-serif',
   fillMode: 'outline' as 'outline' | 'filled',
+  brushType: 'pencil' as 'pencil' | 'marker',
+  selectedEmoji: '😊',
   stepCounter: 1,
   zoom: 1,
   isDrawing: false,
@@ -43,6 +44,27 @@ let isRestoringHistory = false;
 
 async function init() {
   const params = new URLSearchParams(location.search);
+  const source = params.get('source');
+
+  // Annotate mode — load image from chrome.storage.local
+  if (source === 'annotate') {
+    updateLoadingText('Loading image…');
+    const stored = await chrome.storage.local.get('snapmonk_annotate_image');
+    const dataUrl = stored['snapmonk_annotate_image'] as string | undefined;
+    await chrome.storage.local.remove('snapmonk_annotate_image');
+    if (!dataUrl) { showError('No image found. Please go back and try again.'); return; }
+    baseImageUrl = dataUrl;
+    await initCanvas(dataUrl);
+    hideLoading();
+    setupTools();
+    setupKeyboard();
+    setupZoom();
+    setupExport();
+    pushHistory();
+    (document.getElementById('filename-input') as HTMLInputElement).value = 'annotated-image';
+    return;
+  }
+
   const captureId = params.get('id');
 
   if (!captureId) {
@@ -67,8 +89,6 @@ async function init() {
   setupKeyboard();
   setupZoom();
   setupExport();
-  initSharePanel(renderFlatCanvas);
-  initBugReportPanel(renderFlatCanvas);
   pushHistory();
 
   // Set filename from page title
@@ -229,6 +249,94 @@ function setupTools() {
   // Delete selected
   document.getElementById('btn-delete')?.addEventListener('click', deleteSelected);
 
+  // Clear all annotations
+  document.getElementById('btn-clear-annotations')?.addEventListener('click', () => {
+    const objects = canvas.getObjects();
+    if (objects.length === 0) return;
+    if (!confirm('Remove all annotations? This cannot be undone.')) return;
+    canvas.remove(...objects);
+    canvas.discardActiveObject();
+    canvas.renderAll();
+    pushHistory();
+  });
+
+  // Font family
+  const fontFamilySelect = document.getElementById('font-family-select') as HTMLSelectElement;
+  fontFamilySelect?.addEventListener('change', () => {
+    state.fontFamily = fontFamilySelect.value;
+    const active = canvas.getActiveObject();
+    if (active && 'fontFamily' in active) {
+      active.set({ fontFamily: state.fontFamily });
+      canvas.renderAll();
+    }
+  });
+
+  // Brush type
+  document.getElementById('btn-brush-pencil')?.addEventListener('click', () => {
+    state.brushType = 'pencil';
+    document.getElementById('btn-brush-pencil')?.classList.add('active');
+    document.getElementById('btn-brush-marker')?.classList.remove('active');
+    syncPenBrush();
+  });
+  document.getElementById('btn-brush-marker')?.addEventListener('click', () => {
+    state.brushType = 'marker';
+    document.getElementById('btn-brush-marker')?.classList.add('active');
+    document.getElementById('btn-brush-pencil')?.classList.remove('active');
+    syncPenBrush();
+  });
+
+  // Emoji category tabs
+  document.getElementById('emoji-cat-tabs')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.emoji-cat-btn') as HTMLElement | null;
+    if (!btn) return;
+    const cat = btn.dataset['cat']!;
+    document.querySelectorAll('.emoji-cat-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.emoji-cat-grid').forEach((g) => {
+      (g as HTMLElement).style.display = g.id === `emoji-cat-${cat}` ? 'grid' : 'none';
+    });
+  });
+
+  // Emoji item selection
+  document.getElementById('emoji-picker')?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const item = target.closest('.emoji-item') as HTMLElement | null;
+    if (!item) return;
+    state.selectedEmoji = item.dataset['emoji']!;
+    document.querySelectorAll('.emoji-item').forEach((el) => el.classList.remove('active'));
+    item.classList.add('active');
+    const preview = document.getElementById('emoji-selected-preview');
+    if (preview) preview.textContent = state.selectedEmoji;
+  });
+
+  // Add image from file
+  const addImgInput = document.getElementById('add-img-input') as HTMLInputElement;
+  addImgInput?.addEventListener('change', async () => {
+    const file = addImgInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const img = await FabricImage.fromURL(dataUrl);
+      const maxW = canvas.width! * 0.5;
+      const maxH = canvas.height! * 0.5;
+      const scale = Math.min(maxW / img.width!, maxH / img.height!, 1);
+      img.set({
+        left: (canvas.width! - img.width! * scale) / 2,
+        top: (canvas.height! - img.height! * scale) / 2,
+        scaleX: scale,
+        scaleY: scale,
+        selectable: true,
+      });
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.renderAll();
+      setTool('select');
+    };
+    reader.readAsDataURL(file);
+    addImgInput.value = '';
+  });
+
   // Canvas mouse events
   canvas.on('mouse:down', onMouseDown);
   canvas.on('mouse:move', onMouseMove);
@@ -247,8 +355,18 @@ function setTool(tool: Tool) {
   // Contextual property panels
   const shapeStyle = document.getElementById('shape-style') as HTMLDivElement;
   const fontsizeSection = document.getElementById('fontsize-section') as HTMLDivElement;
+  const brushStyle = document.getElementById('brush-style') as HTMLDivElement;
+  const emojiPicker = document.getElementById('emoji-picker') as HTMLDivElement;
   shapeStyle.style.display = (tool === 'rect' || tool === 'circle') ? '' : 'none';
-  fontsizeSection.style.display = (tool === 'text' || tool === 'callout') ? '' : 'none';
+  fontsizeSection.style.display = (tool === 'text' || tool === 'callout' || tool === 'emoji') ? '' : 'none';
+  brushStyle.style.display = (tool === 'pen') ? '' : 'none';
+  emojiPicker.style.display = (tool === 'emoji') ? '' : 'none';
+
+  if (tool === 'add-img') {
+    (document.getElementById('add-img-input') as HTMLInputElement).click();
+    setTool('select');
+    return;
+  }
 
   if (tool === 'select') {
     canvas.isDrawingMode = false;
@@ -259,8 +377,7 @@ function setTool(tool: Tool) {
     if (!canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush = new PencilBrush(canvas);
     }
-    canvas.freeDrawingBrush.color = state.color;
-    canvas.freeDrawingBrush.width = state.strokeWidth;
+    syncPenBrush();
     canvas.selection = false;
   } else {
     canvas.isDrawingMode = false;
@@ -273,8 +390,13 @@ function setTool(tool: Tool) {
 
 function syncPenBrush() {
   if (state.tool !== 'pen' || !canvas.freeDrawingBrush) return;
-  canvas.freeDrawingBrush.color = state.color;
-  canvas.freeDrawingBrush.width = state.strokeWidth;
+  if (state.brushType === 'marker') {
+    canvas.freeDrawingBrush.color = hexToRgba(state.color, 0.5);
+    canvas.freeDrawingBrush.width = Math.max(state.strokeWidth * 4, 16);
+  } else {
+    canvas.freeDrawingBrush.color = state.color;
+    canvas.freeDrawingBrush.width = state.strokeWidth;
+  }
 }
 
 // ─── Mouse Drawing ────────────────────────────────────────────────────────────
@@ -290,6 +412,7 @@ function onMouseDown(opt: { e: TPointerEvent }) {
   if (state.tool === 'text') { addText(p.x, p.y); return; }
   if (state.tool === 'callout') { addCallout(p.x, p.y); return; }
   if (state.tool === 'step') { addStep(p.x, p.y); return; }
+  if (state.tool === 'emoji') { addEmoji(p.x, p.y); return; }
 
   state.isDrawing = true;
   state.startPoint = { x: p.x, y: p.y };
@@ -536,10 +659,10 @@ function addCallout(x: number, y: number) {
     left: x,
     top: y,
     fontSize: state.fontSize,
-    fill: state.color,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fill: '#ffffff',
+    fontFamily: state.fontFamily,
     fontWeight: '700',
-    backgroundColor: hexToRgba(state.color, 0.14),
+    backgroundColor: state.color,
     editable: true,
     selectable: true,
     width: 160,
@@ -559,7 +682,7 @@ async function addText(x: number, y: number) {
     top: y,
     fontSize: state.fontSize,
     fill: state.color,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: state.fontFamily,
     fontWeight: '600',
     editable: true,
     selectable: true,
@@ -571,6 +694,20 @@ async function addText(x: number, y: number) {
   text.selectAll();
   canvas.renderAll();
   setTool('select');
+}
+
+function addEmoji(x: number, y: number) {
+  const text = new FabricText(state.selectedEmoji, {
+    left: x,
+    top: y,
+    fontSize: state.fontSize + 12,
+    selectable: true,
+    originX: 'center',
+    originY: 'center',
+  });
+  canvas.add(text);
+  canvas.setActiveObject(text);
+  canvas.renderAll();
 }
 
 function addStep(x: number, y: number) {
@@ -699,7 +836,7 @@ function setupKeyboard() {
       v: 'select', a: 'arrow', l: 'line', r: 'rect', c: 'circle',
       t: 'text', p: 'pen', q: 'callout',
       h: 'highlight', b: 'blur', d: 'redact',
-      s: 'step', x: 'crop',
+      s: 'step', x: 'crop', e: 'emoji', i: 'add-img',
     };
     if (!ctrl && !e.altKey && toolMap[e.key]) setTool(toolMap[e.key]!);
   });
@@ -802,8 +939,47 @@ function renderFlatCanvas(): HTMLCanvasElement {
   return canvas.toCanvasElement(window.devicePixelRatio || 1);
 }
 
+async function applyWatermarkIfEnabled(el: HTMLCanvasElement): Promise<HTMLCanvasElement> {
+  const prefs = await chrome.storage.sync.get({ watermark: false });
+  if (!prefs['watermark']) return el;
+
+  const ctx = el.getContext('2d')!;
+  const text = 'SnapMonk by DevOps-Monk';
+  const fontSize = Math.max(14, Math.round(el.width * 0.018));
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.textBaseline = 'bottom';
+
+  const padding = Math.round(fontSize * 0.6);
+  const textW = ctx.measureText(text).width;
+  const bgW = textW + padding * 2;
+  const bgH = fontSize + padding * 1.5;
+  const x = el.width - bgW - padding;
+  const y = el.height - padding;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  const r = 6;
+  const bx = x - padding, by = y - bgH;
+  ctx.beginPath();
+  ctx.moveTo(bx + r, by); ctx.lineTo(bx + bgW - r, by);
+  ctx.quadraticCurveTo(bx + bgW, by, bx + bgW, by + r);
+  ctx.lineTo(bx + bgW, by + bgH - r);
+  ctx.quadraticCurveTo(bx + bgW, by + bgH, bx + bgW - r, by + bgH);
+  ctx.lineTo(bx + r, by + bgH);
+  ctx.quadraticCurveTo(bx, by + bgH, bx, by + bgH - r);
+  ctx.lineTo(bx, by + r);
+  ctx.quadraticCurveTo(bx, by, bx + r, by);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.fillText(text, x, y);
+
+  return el;
+}
+
 async function copyToClipboard() {
-  const el = renderFlatCanvas();
+  const flat = renderFlatCanvas();
+  const el = await applyWatermarkIfEnabled(flat);
   el.toBlob(async (blob) => {
     if (!blob) return;
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -811,8 +987,9 @@ async function copyToClipboard() {
   });
 }
 
-function downloadAs(format: 'png' | 'jpg') {
-  const el = renderFlatCanvas();
+async function downloadAs(format: 'png' | 'jpg') {
+  const flat = renderFlatCanvas();
+  const el = await applyWatermarkIfEnabled(flat);
   const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
   const quality = format === 'jpg' ? 0.92 : 1;
   const dataUrl = el.toDataURL(mimeType, quality);
