@@ -41,15 +41,13 @@ async function init() {
   recordingBlob = entry.blob;
   originalMimeType = entry.mimeType;
 
-  // Auto-select the format button that matches what was actually recorded
+  // Default the active button to match the native recorded format.
   const isNativeMP4 = originalMimeType.startsWith('video/mp4');
-  if (isNativeMP4) {
-    selectedFormat = 'mp4';
-    document.querySelectorAll('.pv-fmt-btn').forEach(b => {
-      const btn = b as HTMLButtonElement;
-      btn.classList.toggle('active', btn.dataset['fmt'] === 'mp4');
-    });
-  }
+  selectedFormat = isNativeMP4 ? 'mp4' : 'webm';
+  document.querySelectorAll('.pv-fmt-btn').forEach(b => {
+    const btn = b as HTMLButtonElement;
+    btn.classList.toggle('active', btn.dataset['fmt'] === selectedFormat);
+  });
 
   const url = URL.createObjectURL(recordingBlob);
 
@@ -69,18 +67,31 @@ async function init() {
     if (isFinite(video.duration) && video.duration > 0) {
       durationEl.textContent = fmtDuration(video.duration);
     }
-    // Seek slightly off 0 to force first frame render (WebM without cue headers shows black)
-    if (video.readyState >= 2) video.currentTime = 0.1;
   });
 
-  // Belt-and-suspenders: also seek on canplay in case loadedmetadata fired before data
   video.addEventListener('canplay', () => {
-    if (video.currentTime === 0) video.currentTime = 0.1;
     loadingEl.classList.add('hidden');
     video.classList.add('visible');
+    // Seek slightly off 0 to render first frame (WebM without cue headers shows black).
+    // Only safe to seek here, after the browser has confirmed it can play.
+    if (video.currentTime === 0 && video.seekable.length > 0) {
+      video.currentTime = 0.1;
+    }
   }, { once: true });
 
+  let retried = false;
   video.addEventListener('error', () => {
+    // On first failure, revoke the old URL and recreate it — intermittent decode errors
+    // often resolve on a fresh object URL from the same in-memory blob.
+    if (!retried && recordingBlob) {
+      retried = true;
+      URL.revokeObjectURL(video.src);
+      video.src = URL.createObjectURL(recordingBlob);
+      video.load();
+      return;
+    }
+    loadingEl.classList.remove('hidden');
+    video.classList.remove('visible');
     loadingEl.innerHTML = '<span style="color:#ef4444;font-size:14px;">Failed to load video.</span>';
   });
 
@@ -117,10 +128,7 @@ downloadBtn.addEventListener('click', async () => {
   downloadBtn.textContent = 'Preparing…';
 
   try {
-    // Always use the actual recorded format's extension — just renaming a WebM to .mp4 produces an unplayable file
-    const isNativeMP4 = originalMimeType.startsWith('video/mp4');
-    const ext = isNativeMP4 ? 'mp4' : 'webm';
-    triggerDownload(recordingBlob, `snapmonk-recording-${Date.now()}.${ext}`);
+    triggerDownload(recordingBlob, `snapmonk-recording-${Date.now()}.${selectedFormat}`);
   } finally {
     downloadBtn.disabled = false;
     downloadBtn.innerHTML = `${DOWNLOAD_ICON} Download`;

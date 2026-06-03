@@ -174,7 +174,7 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     ...mixDest.stream.getAudioTracks(),
   ]);
 
-  const mimeType = getSupportedMimeType(true);
+  const mimeType = getSupportedMimeType();
   rec.chunks = [];
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -182,6 +182,10 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
   });
   rec.mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) rec.chunks.push(e.data);
+  };
+  rec.mediaRecorder.onerror = (e) => {
+    console.error('[SnapMonk] MediaRecorder error:', e);
+    stopRecording();
   };
   rec.mediaRecorder.onstop = () => finalizeRecording();
   // 250ms chunks — smaller slices prevent audio gaps from buffer underruns
@@ -226,7 +230,7 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  const mimeType = getSupportedMimeType(true);
+  const mimeType = getSupportedMimeType();
   const blob = new Blob(rec.chunks, { type: mimeType });
 
   releaseStreams();
@@ -497,27 +501,16 @@ function removeOverlays() {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function getSupportedMimeType(forMp4 = false): string {
-  if (forMp4) {
-    // Chrome 130+ can record natively to MP4 — no conversion needed at all.
-    // Fall back to H.264-in-WebM so ffmpeg only has to remux (not re-encode).
-    const mp4Candidates = [
-      'video/mp4;codecs=avc1,mp4a.40.2',
-      'video/mp4;codecs=avc1',
-      'video/mp4',
-      'video/webm;codecs=h264,opus',
-      'video/webm;codecs=avc1,opus',
-    ];
-    const found = mp4Candidates.find((t) => MediaRecorder.isTypeSupported(t));
-    if (found) return found;
-  }
-  const defaults = [
+function getSupportedMimeType(): string {
+  // VP9-in-WebM is Chrome's native recording codec — reliable across all systems.
+  // Avoid H264-in-WebM: it's non-standard and Chrome's encoder silently fails mid-recording.
+  // Avoid native MP4: it locks the download to .mp4 only.
+  const candidates = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=h264,opus',
     'video/webm',
   ];
-  return defaults.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 }
 
 function formatTimestamp(): string {
