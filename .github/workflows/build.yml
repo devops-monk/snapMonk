@@ -81,7 +81,7 @@ jobs:
             > To update: repeat steps 1-5 (click the ↺ refresh icon on the card instead of Load unpacked if already installed).
 
             _Commit: ${{ github.sha }}_
-          prerelease: true
+          prerelease: false
           make_latest: true
           files: snapmonk.zip
 
