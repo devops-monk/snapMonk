@@ -85,19 +85,12 @@ jobs:
           make_latest: true
           files: snapmonk.zip
 
-      # Main branch: upload & publish to Chrome Web Store
-      - name: Publish to Chrome Web Store
+      # Main branch: also expose the build as a downloadable Actions artifact
+      # (in addition to the rolling "latest" release above).
+      - name: Upload zip artifact (main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-        run: |
-          npx chrome-webstore-upload-cli@3 upload \
-            --source snapmonk.zip \
-            --extension-id "$EXTENSION_ID" \
-            --client-id "$CLIENT_ID" \
-            --client-secret "$CLIENT_SECRET" \
-            --refresh-token "$REFRESH_TOKEN" \
-            --auto-publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapmonk-${{ env.VERSION }}
+          path: snapmonk.zip
+          retention-days: 30
