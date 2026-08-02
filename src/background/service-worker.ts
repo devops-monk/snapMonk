@@ -213,60 +213,94 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   // Give the popup time to fully close
   await sleep(150);
 
+  // Prepare the page for a clean capture, then measure the STABILIZED height:
+  //  1. Freeze animations/transitions, force instant scrolling, hide scrollbars.
+  //  2. Pre-scroll top→bottom to trigger lazy-loaded images/content, waiting for
+  //     images to decode — this is what makes long pages come out complete and
+  //     sharp instead of half-loaded.
+  //  3. Re-measure the (now stable) scroll height and scroll back to top.
   const results = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => {
+    func: async () => {
+      const nap = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+      // Freeze the page so scroll positions are exact and nothing animates mid-shot.
+      const style = document.createElement('style');
+      style.id = 'sm-capture-style';
+      style.textContent =
+        'html{scroll-behavior:auto !important;}' +
+        '*,*::before,*::after{animation-play-state:paused !important;transition:none !important;caret-color:transparent !important;}' +
+        '::-webkit-scrollbar{width:0 !important;height:0 !important;display:none !important;}' +
+        'html{scrollbar-width:none !important;}';
+      document.documentElement.appendChild(style);
+
       // Detect a primary inner scrollable container for SPA-style pages (Jira, GitLab, etc.)
       // where the document body doesn't scroll but a large inner element does.
       function detectInnerScroller() {
-        const docScrollHeight = Math.max(
+        const docSH = Math.max(
           document.body.scrollHeight,
           document.documentElement.scrollHeight,
           document.documentElement.offsetHeight,
         );
-        if (docScrollHeight > window.innerHeight + 50) return null; // page scrolls normally
-
+        if (docSH > window.innerHeight + 50) return null; // page scrolls normally
         let best: HTMLElement | null = null;
-        let bestScrollHeight = 0;
+        let bestSH = 0;
         document.querySelectorAll<HTMLElement>('*').forEach((el) => {
           const oy = window.getComputedStyle(el).overflowY;
           if (oy !== 'auto' && oy !== 'scroll') return;
-          const sh = el.scrollHeight;
-          const ch = el.clientHeight;
-          if (sh <= ch + 50) return;           // not meaningfully scrollable
-          if (ch < window.innerHeight * 0.3) return; // too small to be main content
-          if (sh > bestScrollHeight) { bestScrollHeight = sh; best = el; }
+          if (el.scrollHeight <= el.clientHeight + 50) return;
+          if (el.clientHeight < window.innerHeight * 0.3) return;
+          if (el.scrollHeight > bestSH) { bestSH = el.scrollHeight; best = el; }
         });
         if (!best) return null;
-        best.setAttribute('data-sm-scroller', '1');
-        const rect = best.getBoundingClientRect();
-        return {
-          scrollHeight: best.scrollHeight,
-          clientHeight: best.clientHeight,
-          clientWidth: best.clientWidth,
-          scrollTop: best.scrollTop,
-          rectTop: rect.top,
-          rectLeft: rect.left,
-        };
+        (best as HTMLElement).setAttribute('data-sm-scroller', '1');
+        return best as HTMLElement;
       }
 
       const inner = detectInnerScroller();
-      const docScrollHeight = Math.max(
+      const docSH = () => Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight,
         document.documentElement.offsetHeight,
       );
+      const getSH = () => (inner ? inner.scrollHeight : docSH());
+      const vh = inner ? inner.clientHeight : window.innerHeight;
+      const setY = (y: number) => { if (inner) inner.scrollTop = y; else window.scrollTo(0, y); };
+      const getY = () => (inner ? inner.scrollTop : window.scrollY);
+
+      const origY = getY();
+
+      // Pre-scroll to trigger lazy loading; the page can grow as content loads.
+      let sh = getSH();
+      for (let y = 0; y < sh + vh; y += Math.round(vh * 0.9)) {
+        setY(y);
+        await nap(90);
+        sh = getSH();
+        if (y > 40000) break; // safety cap for pathologically long pages
+      }
+      // Wait for images to finish decoding (bounded).
+      const pending = Array.from(document.images).filter((im) => !im.complete);
+      await Promise.race([
+        Promise.all(pending.map((im) => im.decode().catch(() => undefined))),
+        nap(1500),
+      ]);
+      sh = getSH();
+      setY(0);
+      await nap(150);
+
       return {
-        scrollHeight: inner?.scrollHeight ?? docScrollHeight,
-        viewportHeight: inner?.clientHeight ?? window.innerHeight,
-        viewportWidth: inner?.clientWidth ?? window.innerWidth,
-        windowScrollY: window.scrollY,
+        scrollHeight: sh,
+        viewportHeight: vh,
+        viewportWidth: inner ? inner.clientWidth : window.innerWidth,
+        windowScrollY: inner ? window.scrollY : origY,
         windowScrollX: window.scrollX,
-        containerScrollTop: inner?.scrollTop ?? 0,
+        containerScrollTop: inner ? origY : 0,
         devicePixelRatio: window.devicePixelRatio || 1,
-        // Rect to crop each screenshot to (null = full viewport / window scroll mode)
         containerRect: inner
-          ? { top: inner.rectTop, left: inner.rectLeft, width: inner.clientWidth, height: inner.clientHeight }
+          ? (() => {
+              const r = inner.getBoundingClientRect();
+              return { top: r.top, left: r.left, width: inner.clientWidth, height: inner.clientHeight };
+            })()
           : null,
       };
     },
@@ -294,22 +328,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
   } = pageRaw;
 
   const useInnerScroller = !!containerRect;
-
-  // Scroll to top (container or window)
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (inner: boolean) => {
-      if (inner) {
-        (document.querySelector('[data-sm-scroller]') as HTMLElement | null)?.scrollTo?.(0, 0)
-          ?? ((document.querySelector('[data-sm-scroller]') as HTMLElement | null)
-            && ((document.querySelector('[data-sm-scroller]') as HTMLElement).scrollTop = 0));
-      } else {
-        window.scrollTo(0, 0);
-      }
-    },
-    args: [useInnerScroller],
-  });
-  await sleep(250);
+  await sleep(200);
 
   // Read once before the loop. Chrome enforces ~2 captureVisibleTab calls/sec,
   // so we floor at 600ms to stay safely under the quota.
@@ -356,7 +375,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
       fixedHidden = true;
     }
 
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    const dataUrl = await captureVisibleTabSafe(windowId);
     const blob = containerRect
       ? await cropToRect(dataUrl, containerRect, devicePixelRatio)
       : await dataUrlToBlob(dataUrl);
@@ -379,7 +398,8 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     });
   }
 
-  // Restore scroll positions and remove marker attribute
+  // Restore scroll positions, remove the marker attribute, and drop the capture
+  // style so the page returns exactly to how the user left it.
   await chrome.scripting.executeScript({
     target: { tabId },
     func: (wx: number, wy: number, containerTop: number, inner: boolean) => {
@@ -388,6 +408,7 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
         if (el) { el.scrollTop = containerTop; el.removeAttribute('data-sm-scroller'); }
       }
       window.scrollTo(wx, wy);
+      document.getElementById('sm-capture-style')?.remove();
     },
     args: [windowScrollX, windowScrollY, containerScrollTop, useInnerScroller],
   });
@@ -503,6 +524,22 @@ async function openEditor(captureId: string): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// captureVisibleTab is rate-limited by Chrome (~2 calls/sec). On a full-page
+// capture with many slices we can still trip it, so retry with backoff instead
+// of dropping a slice (which would leave a gap in the stitched image).
+async function captureVisibleTabSafe(windowId: number): Promise<string> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    } catch (err) {
+      lastErr = err;
+      await sleep(700 + attempt * 300);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('captureVisibleTab failed');
 }
 
 function showBadgeError(tabId: number): void {
