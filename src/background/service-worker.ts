@@ -402,9 +402,11 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
     });
     await sleep(scrollDelay);
 
-    // For window-scroll mode: hide fixed/sticky elements from the second slice onward
-    // so they don't repeat when stitched. For inner-scroller mode we crop them out anyway.
-    if (!useInnerScroller && requestedY > 0 && !fixedHidden) {
+    // Hide fixed/sticky elements from the second slice onward so a pinned header,
+    // nav, or sidebar (e.g. Jira) is captured once in the first slice and never
+    // repeated down the stitched image. Applied in BOTH window-scroll and
+    // inner-scroller modes.
+    if (requestedY > 0 && !fixedHidden) {
       await chrome.scripting.executeScript({
         target: { tabId },
         func: () => {
