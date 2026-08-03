@@ -1,4 +1,7 @@
-import { saveCapture, dataUrlToBlob, generateId, savePendingRecording } from '../utils/db';
+import {
+  saveCapture, dataUrlToBlob, generateId, savePendingRecording,
+  appendRecChunk, assembleRecChunks, clearRecChunks,
+} from '../utils/db';
 import type {
   CaptureRecord,
   PageInfo,
@@ -75,11 +78,6 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-// In-flight chunked recording transfers (transferId → assembled byte parts).
-// Chunked handoff removes the single-message size cap so recordings are limited
-// by memory/disk, not by Chrome's IPC message size.
-const recTransfers = new Map<string, { mimeType: string; createdAt: number; duration: number; parts: Uint8Array[] }>();
-
 function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
   const u8 = new Uint8Array(binary.length);
@@ -114,33 +112,32 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
     return;
   }
 
-  // Chunked recording handoff — the recorder streams the finished blob in slices
-  // (recStart → recChunk* → recEnd) so arbitrarily large recordings get through.
+  // Streamed recording handoff — the recorder writes each slice to disk as it
+  // records (recStart → recChunk* → recEnd), so recordings are bounded by disk,
+  // not memory or Chrome's IPC size, and survive a service-worker restart.
   if (action === 'recStart') {
-    const m = msg as unknown as { transferId: string; mimeType: string; createdAt: number; duration: number };
-    recTransfers.set(m.transferId, { mimeType: m.mimeType, createdAt: m.createdAt, duration: m.duration, parts: [] });
+    const m = msg as unknown as { transferId: string };
+    await clearRecChunks(m.transferId); // clear any stale slices for this id
     return;
   }
   if (action === 'recChunk') {
     const m = msg as unknown as { transferId: string; seq: number; base64: string };
-    const t = recTransfers.get(m.transferId);
-    if (!t) throw new Error('unknown transfer'); // rejected → recorder falls back to direct download
-    t.parts[m.seq] = base64ToBytes(m.base64);
+    const bytes = base64ToBytes(m.base64);
+    await appendRecChunk(m.transferId, m.seq, new Blob([bytes as BlobPart]));
     return;
   }
   if (action === 'recEnd') {
-    const m = msg as unknown as { transferId: string };
-    const t = recTransfers.get(m.transferId);
-    if (!t) throw new Error('unknown transfer');
-    recTransfers.delete(m.transferId);
-    const blob = new Blob(t.parts as BlobPart[], { type: t.mimeType });
-    await savePendingRecording({ blob, mimeType: t.mimeType, createdAt: t.createdAt, duration: t.duration });
+    const m = msg as unknown as { transferId: string; mimeType: string; createdAt: number; duration: number };
+    const blob = await assembleRecChunks(m.transferId, m.mimeType);
+    if (blob.size === 0) throw new Error('no recorded data');
+    await savePendingRecording({ blob, mimeType: m.mimeType, createdAt: m.createdAt, duration: m.duration });
+    await clearRecChunks(m.transferId);
     await chrome.storage.local.remove('snapmonk_recording_state');
     await chrome.tabs.create({ url: chrome.runtime.getURL('src/preview/preview.html') });
     return;
   }
   if (action === 'recAbort') {
-    recTransfers.delete((msg as unknown as { transferId: string }).transferId);
+    await clearRecChunks((msg as unknown as { transferId: string }).transferId);
     return;
   }
 

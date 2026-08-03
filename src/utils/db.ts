@@ -11,10 +11,17 @@ interface SnapMonkSchema extends DBSchema {
     key: string;
     value: PendingRecording;
   };
+  // Streamed recording chunks: written incrementally during a recording so the
+  // video lives on disk (not in memory) and survives a service-worker restart.
+  recChunks: {
+    key: string; // `${transferId}:${seq}`
+    value: { key: string; transferId: string; seq: number; data: Blob };
+    indexes: { by_transfer: string };
+  };
 }
 
 const DB_NAME = 'snapmonk-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let _db: IDBPDatabase<SnapMonkSchema> | null = null;
 
@@ -28,6 +35,10 @@ async function getDB(): Promise<IDBPDatabase<SnapMonkSchema>> {
       }
       if (oldVersion < 2) {
         db.createObjectStore('recordings', { keyPath: 'id' });
+      }
+      if (oldVersion < 3) {
+        const store = db.createObjectStore('recChunks', { keyPath: 'key' });
+        store.createIndex('by_transfer', 'transferId');
       }
     },
   });
@@ -84,4 +95,26 @@ export async function getPendingRecording(): Promise<PendingRecording | undefine
 export async function deletePendingRecording(): Promise<void> {
   const db = await getDB();
   await db.delete('recordings', PENDING_REC_KEY);
+}
+
+// ─── Streamed recording chunks (on-disk during recording) ─────────────────────
+
+export async function appendRecChunk(transferId: string, seq: number, data: Blob): Promise<void> {
+  const db = await getDB();
+  await db.put('recChunks', { key: `${transferId}:${seq}`, transferId, seq, data });
+}
+
+// Assemble the streamed chunks (in seq order) into a single Blob.
+export async function assembleRecChunks(transferId: string, mimeType: string): Promise<Blob> {
+  const db = await getDB();
+  const rows = await db.getAllFromIndex('recChunks', 'by_transfer', transferId);
+  rows.sort((a, b) => a.seq - b.seq);
+  return new Blob(rows.map((r) => r.data), { type: mimeType });
+}
+
+export async function clearRecChunks(transferId: string): Promise<void> {
+  const db = await getDB();
+  const keys = await db.getAllKeysFromIndex('recChunks', 'by_transfer', transferId);
+  const tx = db.transaction('recChunks', 'readwrite');
+  await Promise.all([...keys.map((k) => tx.store.delete(k)), tx.done]);
 }

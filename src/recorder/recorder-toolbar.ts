@@ -19,6 +19,11 @@ interface RecorderState {
   // cutting the mic/system audio.
   audioNodes: AudioNode[];
   chunks: Blob[];
+  mimeType: string;
+  transferId: string;
+  seq: number;
+  pendingSends: Promise<void>[];
+  streaming: boolean;
   startTime: number;
   pausedAt: number;
   totalPausedMs: number;
@@ -35,6 +40,11 @@ const rec: RecorderState = {
   audioCtx: null,
   audioNodes: [],
   chunks: [],
+  mimeType: '',
+  transferId: '',
+  seq: 0,
+  pendingSends: [],
+  streaming: false,
   startTime: 0,
   pausedAt: 0,
   totalPausedMs: 0,
@@ -195,13 +205,38 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
   ]);
 
   const mimeType = getSupportedMimeType(options.format);
+  rec.mimeType = mimeType;
   rec.chunks = [];
+  rec.seq = 0;
+  rec.pendingSends = [];
+  rec.transferId = `rec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  // Quality: pick a healthy video bitrate per resolution (MediaRecorder's default
+  // is often too low). Because recordings now stream to disk, bigger is fine.
+  const BITRATE: Record<string, number> = {
+    '480p': 1_500_000, '720p': 3_000_000, '1080p': 6_000_000, '2k': 12_000_000, '4k': 24_000_000,
+  };
+  const videoBitsPerSecond = BITRATE[options.resolution ?? '1080p'] ?? 6_000_000;
+
+  // Try to stream the recording to disk (IndexedDB via the background). If the
+  // handoff can't start, fall back to buffering in memory and transferring at
+  // the end.
+  rec.streaming = await sendRec({ action: 'recStart', transferId: rec.transferId });
+
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
     audioBitsPerSecond: 128000,
+    videoBitsPerSecond,
   });
   rec.mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) rec.chunks.push(e.data);
+    if (e.data.size === 0) return;
+    if (rec.streaming) {
+      // Stream to disk and free the chunk from memory — recording length is now
+      // bounded by disk, not RAM.
+      rec.pendingSends.push(streamChunk(rec.transferId, rec.seq++, e.data));
+    } else {
+      rec.chunks.push(e.data);
+    }
   };
   rec.mediaRecorder.onerror = (e) => {
     console.error('[SnapMonk] MediaRecorder error:', e);
@@ -250,18 +285,55 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  // Match the container chosen at start (same input → same supported type),
-  // and prefer the actual recorded chunk type when available.
-  const mimeType = rec.chunks[0]?.type || getSupportedMimeType(rec.options?.format ?? 'mp4');
-  const blob = new Blob(rec.chunks, { type: mimeType });
+  const mimeType = rec.mimeType || getSupportedMimeType(rec.options?.format ?? 'mp4');
+  const createdAt = Date.now();
+  const duration = rec.startTime > 0 ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000 : 0;
+  const streaming = rec.streaming;
+  const transferId = rec.transferId;
+  const pending = rec.pendingSends.slice();
+  const memChunks = rec.chunks.slice();
 
   releaseStreams();
   resetRecState();
 
-  // openPreviewPage sends the recording to the background, which stores it in
-  // the extension's IndexedDB and opens the preview tab. It also clears the
-  // recording state (replaces the separate recordingStopped notification).
-  await openPreviewPage(blob, mimeType);
+  if (streaming) {
+    try {
+      const results = await Promise.allSettled(pending);
+      if (results.some((r) => r.status === 'rejected')) throw new Error('a slice failed to save');
+      const done = await chrome.runtime.sendMessage({
+        action: 'recEnd', transferId, mimeType, createdAt, duration,
+      });
+      if (!done?.ok) throw new Error('finish rejected');
+    } catch {
+      // Disk handoff failed — abandon it and, if we still hold anything in
+      // memory, hand the file to the user directly rather than losing it.
+      chrome.runtime.sendMessage({ action: 'recAbort', transferId }).catch(() => {});
+      if (memChunks.length) directDownload(new Blob(memChunks, { type: mimeType }), mimeType);
+    }
+  } else {
+    // Fallback path: buffer was kept in memory; transfer it at the end.
+    await openPreviewPage(new Blob(memChunks, { type: mimeType }), mimeType, createdAt, duration);
+  }
+}
+
+// Fire a message to the background and report whether it acked ok.
+async function sendRec(msg: unknown): Promise<boolean> {
+  try {
+    const res = await chrome.runtime.sendMessage(msg);
+    return !!(res as { ok?: boolean } | undefined)?.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Stream one recorded slice to disk, retrying if the service worker was asleep.
+async function streamChunk(transferId: string, seq: number, data: Blob): Promise<void> {
+  const base64 = bytesToBase64(new Uint8Array(await data.arrayBuffer()));
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (await sendRec({ action: 'recChunk', transferId, seq, base64 })) return;
+    await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+  }
+  throw new Error(`slice ${seq} failed to save`);
 }
 
 // Base64-encode a byte slice (strings survive Chrome's JSON-based IPC intact;
@@ -287,35 +359,24 @@ function directDownload(blob: Blob, mimeType: string) {
   setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
-async function openPreviewPage(blob: Blob, mimeType: string) {
-  const durationSecs = rec.startTime > 0
-    ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000
-    : 0;
+// Fallback handoff (used when streaming-to-disk couldn't start): buffer the whole
+// blob and transfer it in slices at the end.
+async function openPreviewPage(blob: Blob, mimeType: string, createdAt: number, duration: number) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const transferId = `rec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  // 1.5 MB per slice (a multiple of 3 → clean base64 boundaries, ~2 MB per
-  // message — well under the IPC limit). Sent sequentially so ordering and
-  // backpressure are guaranteed, which also keeps the service worker alive.
-  const CHUNK = 3 * 512 * 1024;
+  const CHUNK = 3 * 512 * 1024; // 1.5 MB per slice — clean base64 boundary, ~2 MB/message
 
   try {
-    const started = await chrome.runtime.sendMessage({
-      action: 'recStart', transferId, mimeType, createdAt: Date.now(), duration: durationSecs,
-    });
-    if (!started?.ok) throw new Error('start rejected');
-
+    if (!(await sendRec({ action: 'recStart', transferId }))) throw new Error('start rejected');
     for (let i = 0, seq = 0; i < bytes.length; i += CHUNK, seq++) {
-      const res = await chrome.runtime.sendMessage({
-        action: 'recChunk', transferId, seq, base64: bytesToBase64(bytes.subarray(i, i + CHUNK)),
-      });
-      if (!res?.ok) throw new Error('chunk rejected');
+      if (!(await sendRec({ action: 'recChunk', transferId, seq, base64: bytesToBase64(bytes.subarray(i, i + CHUNK)) }))) {
+        throw new Error('chunk rejected');
+      }
     }
-
-    const done = await chrome.runtime.sendMessage({ action: 'recEnd', transferId });
-    if (!done?.ok) throw new Error('finish rejected');
+    if (!(await sendRec({ action: 'recEnd', transferId, mimeType, createdAt, duration }))) {
+      throw new Error('finish rejected');
+    }
   } catch {
-    // Handoff failed (e.g. the service worker was evicted mid-transfer) — save
-    // the recording directly instead of losing it.
     directDownload(blob, mimeType);
     chrome.runtime.sendMessage({ action: 'recAbort', transferId }).catch(() => {});
   }
@@ -332,6 +393,9 @@ function resetRecState() {
   rec.audioCtx?.close().catch(() => {});
   rec.audioCtx = null;
   rec.chunks = [];
+  rec.pendingSends = [];
+  rec.seq = 0;
+  rec.streaming = false;
 }
 
 // ─── Toolbar Overlay ──────────────────────────────────────────────────────────
