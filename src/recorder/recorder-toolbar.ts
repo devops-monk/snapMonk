@@ -14,6 +14,10 @@ interface RecorderState {
   webcamStream: MediaStream | null;
   micStream: MediaStream | null;
   audioCtx: AudioContext | null;
+  // Keep references to the Web Audio nodes for the whole recording — an unreferenced
+  // MediaStreamAudioSourceNode can be garbage-collected mid-recording, silently
+  // cutting the mic/system audio.
+  audioNodes: AudioNode[];
   chunks: Blob[];
   startTime: number;
   pausedAt: number;
@@ -29,6 +33,7 @@ const rec: RecorderState = {
   webcamStream: null,
   micStream: null,
   audioCtx: null,
+  audioNodes: [],
   chunks: [],
   startTime: 0,
   pausedAt: 0,
@@ -171,8 +176,11 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     // keeps producing audio even if the tab is backgrounded.
     rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
     const mixDest = rec.audioCtx.createMediaStreamDestination();
+    rec.audioNodes = [mixDest]; // hold references so nodes aren't GC'd mid-recording
     for (const track of audioSources) {
-      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+      const src = rec.audioCtx.createMediaStreamSource(new MediaStream([track]));
+      src.connect(mixDest);
+      rec.audioNodes.push(src);
     }
     await rec.audioCtx.resume().catch(() => {});
     rec.audioCtx.addEventListener('statechange', () => {
@@ -285,6 +293,9 @@ function resetRecState() {
   rec.screenStream = null;
   rec.webcamStream = null;
   rec.micStream = null;
+  rec.audioNodes.forEach((n) => n.disconnect());
+  rec.audioNodes = [];
+  rec.audioCtx?.close().catch(() => {});
   rec.audioCtx = null;
   rec.chunks = [];
 }
