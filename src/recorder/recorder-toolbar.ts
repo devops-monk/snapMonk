@@ -18,6 +18,7 @@ interface RecorderState {
   // MediaStreamAudioSourceNode can be garbage-collected mid-recording, silently
   // cutting the mic/system audio.
   audioNodes: AudioNode[];
+  audioStreams: MediaStream[];
   chunks: Blob[];
   mimeType: string;
   transferId: string;
@@ -39,6 +40,7 @@ const rec: RecorderState = {
   micStream: null,
   audioCtx: null,
   audioNodes: [],
+  audioStreams: [],
   chunks: [],
   mimeType: '',
   transferId: '',
@@ -91,8 +93,17 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
 
   if (options.mic) {
     try {
+      // Capture the RAW mic. Chrome's default echoCancellation tries to subtract
+      // captured system audio from the mic and routinely over-cancels, dropping
+      // the user's own voice mid-sentence during screen+mic recording. Noise
+      // suppression / auto gain can gate speech too — turn them all off.
       const micConstraints: MediaStreamConstraints = {
-        audio: options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : true,
+        audio: {
+          ...(options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : {}),
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
         video: false,
       };
       rec.micStream = await navigator.mediaDevices.getUserMedia(micConstraints);
@@ -187,8 +198,13 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
     const mixDest = rec.audioCtx.createMediaStreamDestination();
     rec.audioNodes = [mixDest]; // hold references so nodes aren't GC'd mid-recording
+    rec.audioStreams = [];
     for (const track of audioSources) {
-      const src = rec.audioCtx.createMediaStreamSource(new MediaStream([track]));
+      // Keep the wrapper MediaStream referenced too — an unreferenced one can be
+      // GC'd and take its MediaStreamAudioSourceNode's audio down with it.
+      const wrap = new MediaStream([track]);
+      rec.audioStreams.push(wrap);
+      const src = rec.audioCtx.createMediaStreamSource(wrap);
       src.connect(mixDest);
       rec.audioNodes.push(src);
     }
@@ -390,6 +406,7 @@ function resetRecState() {
   rec.micStream = null;
   rec.audioNodes.forEach((n) => n.disconnect());
   rec.audioNodes = [];
+  rec.audioStreams = [];
   rec.audioCtx?.close().catch(() => {});
   rec.audioCtx = null;
   rec.chunks = [];
