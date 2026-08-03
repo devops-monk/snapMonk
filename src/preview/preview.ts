@@ -76,30 +76,38 @@ async function init() {
     }
   });
 
+  const isMp4 = originalMimeType.includes('mp4');
   video.addEventListener('canplay', () => {
     loadingEl.classList.add('hidden');
     video.classList.add('visible');
-    // Seek slightly off 0 to render first frame (WebM without cue headers shows black).
-    // Only safe to seek here, after the browser has confirmed it can play.
-    if (video.currentTime === 0 && video.seekable.length > 0) {
-      video.currentTime = 0.1;
+    // WebM recorded without cue headers renders a black first frame, so we nudge
+    // currentTime to force a paint. MP4 doesn't need this, and seeking a freshly
+    // muxed fragmented MP4 this early can throw and (wrongly) fire `error` — so
+    // skip it for MP4 and guard it for WebM.
+    if (!isMp4 && video.currentTime === 0 && video.seekable.length > 0) {
+      try { video.currentTime = 0.1; } catch { /* first frame will paint on play */ }
     }
   }, { once: true });
 
-  let retried = false;
+  let attempts = 0;
   video.addEventListener('error', () => {
-    // On first failure, revoke the old URL and recreate it — intermittent decode errors
-    // often resolve on a fresh object URL from the same in-memory blob.
-    if (!retried && recordingBlob) {
-      retried = true;
-      URL.revokeObjectURL(video.src);
-      video.src = URL.createObjectURL(recordingBlob);
-      video.load();
+    attempts++;
+    // Transient decode stalls on freshly-muxed MediaRecorder output usually clear
+    // on a fresh object URL; retry a couple of times with a short backoff.
+    if (attempts <= 2 && recordingBlob) {
+      setTimeout(() => {
+        URL.revokeObjectURL(video.src);
+        video.src = URL.createObjectURL(recordingBlob!);
+        video.load();
+      }, 250 * attempts);
       return;
     }
+    // The blob itself is valid and downloadable even if the inline preview can't
+    // decode it — reassure the user instead of blocking them.
     loadingEl.classList.remove('hidden');
     video.classList.remove('visible');
-    loadingEl.innerHTML = '<span style="color:#ef4444;font-size:14px;">Failed to load video.</span>';
+    loadingEl.innerHTML =
+      '<span style="color:#fca5a5;font-size:13px;">Preview couldn\'t load, but your recording is fine — click Download to save it.</span>';
   });
 
   // Clean up from IndexedDB after loading into memory
