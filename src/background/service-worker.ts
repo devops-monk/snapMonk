@@ -75,6 +75,18 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+// In-flight chunked recording transfers (transferId → assembled byte parts).
+// Chunked handoff removes the single-message size cap so recordings are limited
+// by memory/disk, not by Chrome's IPC message size.
+const recTransfers = new Map<string, { mimeType: string; createdAt: number; duration: number; parts: Uint8Array[] }>();
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const u8 = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
+  return u8;
+}
+
 async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<void> {
   if (msg.action === 'regionSelected') {
     await handleRegionCaptured(msg.rect);
@@ -99,6 +111,36 @@ async function handleMessage(msg: PopupMessage | BackgroundMessage): Promise<voi
     await chrome.storage.local.remove('snapmonk_recording_state');
     const url = chrome.runtime.getURL('src/preview/preview.html');
     await chrome.tabs.create({ url });
+    return;
+  }
+
+  // Chunked recording handoff — the recorder streams the finished blob in slices
+  // (recStart → recChunk* → recEnd) so arbitrarily large recordings get through.
+  if (action === 'recStart') {
+    const m = msg as unknown as { transferId: string; mimeType: string; createdAt: number; duration: number };
+    recTransfers.set(m.transferId, { mimeType: m.mimeType, createdAt: m.createdAt, duration: m.duration, parts: [] });
+    return;
+  }
+  if (action === 'recChunk') {
+    const m = msg as unknown as { transferId: string; seq: number; base64: string };
+    const t = recTransfers.get(m.transferId);
+    if (!t) throw new Error('unknown transfer'); // rejected → recorder falls back to direct download
+    t.parts[m.seq] = base64ToBytes(m.base64);
+    return;
+  }
+  if (action === 'recEnd') {
+    const m = msg as unknown as { transferId: string };
+    const t = recTransfers.get(m.transferId);
+    if (!t) throw new Error('unknown transfer');
+    recTransfers.delete(m.transferId);
+    const blob = new Blob(t.parts as BlobPart[], { type: t.mimeType });
+    await savePendingRecording({ blob, mimeType: t.mimeType, createdAt: t.createdAt, duration: t.duration });
+    await chrome.storage.local.remove('snapmonk_recording_state');
+    await chrome.tabs.create({ url: chrome.runtime.getURL('src/preview/preview.html') });
+    return;
+  }
+  if (action === 'recAbort') {
+    recTransfers.delete((msg as unknown as { transferId: string }).transferId);
     return;
   }
 

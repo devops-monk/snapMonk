@@ -264,27 +264,61 @@ async function finalizeRecording() {
   await openPreviewPage(blob, mimeType);
 }
 
+// Base64-encode a byte slice (strings survive Chrome's JSON-based IPC intact;
+// raw TypedArrays get mangled into plain objects on the receiving end).
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const SUB = 8192;
+  for (let i = 0; i < bytes.length; i += SUB) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + SUB));
+  }
+  return btoa(binary);
+}
+
+// Fallback: if the handoff to the background fails, hand the file straight to the
+// user so a recording is never silently lost.
+function directDownload(blob: Blob, mimeType: string) {
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `snapmonk-recording-${Date.now()}.${ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
 async function openPreviewPage(blob: Blob, mimeType: string) {
   const durationSecs = rec.startTime > 0
     ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000
     : 0;
-  const arrayBuffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  // Base64-encode in chunks — strings survive Chrome's extension IPC (JSON-based)
-  // intact; raw TypedArrays get mangled into plain objects on the receiving end.
-  let binary = '';
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const transferId = `rec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // 1.5 MB per slice (a multiple of 3 → clean base64 boundaries, ~2 MB per
+  // message — well under the IPC limit). Sent sequentially so ordering and
+  // backpressure are guaranteed, which also keeps the service worker alive.
+  const CHUNK = 3 * 512 * 1024;
+
+  try {
+    const started = await chrome.runtime.sendMessage({
+      action: 'recStart', transferId, mimeType, createdAt: Date.now(), duration: durationSecs,
+    });
+    if (!started?.ok) throw new Error('start rejected');
+
+    for (let i = 0, seq = 0; i < bytes.length; i += CHUNK, seq++) {
+      const res = await chrome.runtime.sendMessage({
+        action: 'recChunk', transferId, seq, base64: bytesToBase64(bytes.subarray(i, i + CHUNK)),
+      });
+      if (!res?.ok) throw new Error('chunk rejected');
+    }
+
+    const done = await chrome.runtime.sendMessage({ action: 'recEnd', transferId });
+    if (!done?.ok) throw new Error('finish rejected');
+  } catch {
+    // Handoff failed (e.g. the service worker was evicted mid-transfer) — save
+    // the recording directly instead of losing it.
+    directDownload(blob, mimeType);
+    chrome.runtime.sendMessage({ action: 'recAbort', transferId }).catch(() => {});
   }
-  const base64 = btoa(binary);
-  chrome.runtime.sendMessage({
-    action: 'saveRecording',
-    base64,
-    mimeType,
-    createdAt: Date.now(),
-    duration: durationSecs,
-  }).catch(() => {});
 }
 
 
