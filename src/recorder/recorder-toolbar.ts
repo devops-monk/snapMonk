@@ -154,24 +154,36 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     injectWebcamBubble(rec.webcamStream);
   }
 
-  // Mix all audio sources into a single track via AudioContext.
-  rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
-  const mixDest = rec.audioCtx.createMediaStreamDestination();
+  // Gather the audio sources the user enabled.
+  const audioSources: MediaStreamTrack[] = [];
+  if (options.systemAudio !== false) audioSources.push(...rec.screenStream.getAudioTracks());
+  if (rec.micStream) audioSources.push(...rec.micStream.getAudioTracks());
 
-  if (options.systemAudio !== false) {
-    for (const track of rec.screenStream.getAudioTracks()) {
+  let audioTracks: MediaStreamTrack[] = [];
+  if (audioSources.length === 1) {
+    // Single source → use the track directly. Avoids the Web Audio graph entirely,
+    // which Chrome throttles/suspends when the recorder's tab is in the background
+    // (the usual cause of sound cutting out mid-recording).
+    audioTracks = audioSources;
+  } else if (audioSources.length > 1) {
+    // Multiple sources must be mixed into one track via an AudioContext. Resume it
+    // immediately (it can start suspended) and re-resume on any state change so it
+    // keeps producing audio even if the tab is backgrounded.
+    rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
+    const mixDest = rec.audioCtx.createMediaStreamDestination();
+    for (const track of audioSources) {
       rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
     }
-  }
-  if (rec.micStream) {
-    for (const track of rec.micStream.getAudioTracks()) {
-      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
-    }
+    await rec.audioCtx.resume().catch(() => {});
+    rec.audioCtx.addEventListener('statechange', () => {
+      if (rec.audioCtx?.state === 'suspended') rec.audioCtx.resume().catch(() => {});
+    });
+    audioTracks = mixDest.stream.getAudioTracks();
   }
 
   const combinedStream = new MediaStream([
     ...rec.screenStream.getVideoTracks(),
-    ...mixDest.stream.getAudioTracks(),
+    ...audioTracks,
   ]);
 
   const mimeType = getSupportedMimeType(options.format);
@@ -362,6 +374,8 @@ function togglePause() {
 
   if (rec.isPaused) {
     rec.mediaRecorder.resume();
+    // The audio mixer can suspend while paused/backgrounded — wake it back up.
+    if (rec.audioCtx?.state === 'suspended') rec.audioCtx.resume().catch(() => {});
     rec.isPaused = false;
     // Accumulate the time we were paused so elapsed time stays accurate
     if (rec.pausedAt > 0) {

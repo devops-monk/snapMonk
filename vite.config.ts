@@ -24,6 +24,9 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     minify: true,
+    // Chrome extension pages don't use <link rel="modulepreload"> hints and log
+    // "cross-world resource mismatch" warnings for them — disable module preload.
+    modulePreload: false,
   },
   resolve: {
     alias: {
