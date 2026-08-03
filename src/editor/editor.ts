@@ -129,19 +129,19 @@ async function stitchImages(slices: Blob[], pageInfo: PageInfo): Promise<string>
   const offscreen = new OffscreenCanvas(imgW, totalH);
   const ctx = offscreen.getContext('2d')!;
 
-  const draw = async (bmp: ImageBitmap, meta: SliceMeta) => {
-    const srcOffsetY = Math.round((meta.requestedY - meta.actualY) * dpr);
-    const destY = Math.round(meta.requestedY * dpr);
-    const pageH = Math.min(viewportHeight, scrollHeight - meta.requestedY);
-    const copyH = Math.round(pageH * dpr);
-    ctx.drawImage(bmp, 0, srcOffsetY, imgW, copyH, 0, destY, imgW, copyH);
+  // Paint each captured slice at its TRUE scroll position (actualY). Drawing
+  // top→bottom, the clamped last slice's small overlap simply repaints identical
+  // content, so there are no seams, gaps, or duplicated bands — regardless of
+  // sub-pixel devicePixelRatio rounding or off-by-one captured heights.
+  const draw = (bmp: ImageBitmap, meta: SliceMeta) => {
+    ctx.drawImage(bmp, 0, Math.round(meta.actualY * dpr));
     bmp.close();
   };
+  void viewportWidth;
 
-  await draw(firstBmp, sliceMeta[0]!);
+  draw(firstBmp, sliceMeta[0]!);
   for (let i = 1; i < slices.length; i++) {
-    const bmp = await createImageBitmap(slices[i]!);
-    await draw(bmp, sliceMeta[i]!);
+    draw(await createImageBitmap(slices[i]!), sliceMeta[i]!);
   }
 
   const blob = await offscreen.convertToBlob({ type: 'image/png' });

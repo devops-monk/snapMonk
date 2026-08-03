@@ -325,7 +325,13 @@ async function captureFullPage(tabId: number, windowId: number): Promise<void> {
       ]);
       sh = getSH();
       setY(0);
-      await nap(150);
+      // Many sites hide their sticky header while scrolling down. After the
+      // pre-scroll we're back at the top, so fire a scroll event to let those
+      // headers re-show before the first slice is captured.
+      window.dispatchEvent(new Event('scroll'));
+      if (inner) inner.dispatchEvent(new Event('scroll'));
+      await nap(300);
+      sh = getSH();
 
       return {
         scrollHeight: sh,
