@@ -186,36 +186,35 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
   if (rec.micStream) audioSources.push(...rec.micStream.getAudioTracks());
 
   let audioTracks: MediaStreamTrack[] = [];
-  if (audioSources.length > 0) {
-    // ALWAYS route audio through an AudioContext — even a single mic. Feeding a
-    // raw capture track straight into MediaRecorder next to a separate video
-    // track lets the two capture clocks drift, and the muxer drops audio samples
-    // to resync → intermittent audio gaps (video stays fine). A MediaStreamDest
-    // gives one continuous, resampled 48 kHz audio track with a stable clock,
-    // which eliminates the drift. A GainNode sits in the graph so it always has
-    // an active, non-collectable path. Resume immediately + on any statechange so
-    // it never suspends.
-    rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
+  if (audioSources.length === 1) {
+    // Single source (e.g. mic only) → use the live capture track directly. This
+    // GUARANTEES audio: a getUserMedia/display track is always active, whereas an
+    // AudioContext created mid-flow can start suspended (no user gesture) and
+    // record silence.
+    audioTracks = audioSources;
+  } else if (audioSources.length > 1) {
+    // 2+ sources (system + mic) must be mixed into one track. Use an AudioContext,
+    // resume it, and if it can't run, fall back to the mic track alone so we still
+    // capture *some* audio rather than silence.
+    rec.audioCtx = new AudioContext({ sampleRate: 48000 });
     const mixDest = rec.audioCtx.createMediaStreamDestination();
-    const gain = rec.audioCtx.createGain();
-    gain.gain.value = 1;
-    gain.connect(mixDest);
-    rec.audioNodes = [mixDest, gain]; // hold references so nodes aren't GC'd mid-recording
+    rec.audioNodes = [mixDest];
     rec.audioStreams = [];
     for (const track of audioSources) {
-      // Keep the wrapper MediaStream referenced too — an unreferenced one can be
-      // GC'd and take its MediaStreamAudioSourceNode's audio down with it.
       const wrap = new MediaStream([track]);
       rec.audioStreams.push(wrap);
       const src = rec.audioCtx.createMediaStreamSource(wrap);
-      src.connect(gain);
+      src.connect(mixDest);
       rec.audioNodes.push(src);
     }
     await rec.audioCtx.resume().catch(() => {});
     rec.audioCtx.addEventListener('statechange', () => {
       if (rec.audioCtx?.state === 'suspended') rec.audioCtx.resume().catch(() => {});
     });
-    audioTracks = mixDest.stream.getAudioTracks();
+    // If the context wouldn't start, its output is silent — fall back to the mic.
+    audioTracks = rec.audioCtx.state === 'running'
+      ? mixDest.stream.getAudioTracks()
+      : (rec.micStream?.getAudioTracks() ?? audioSources);
   }
 
   const combinedStream = new MediaStream([
