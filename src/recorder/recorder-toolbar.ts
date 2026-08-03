@@ -226,36 +226,23 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
   const mimeType = getSupportedMimeType(options.format);
   rec.mimeType = mimeType;
   rec.chunks = [];
-  rec.seq = 0;
-  rec.pendingSends = [];
-  rec.transferId = `rec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  // Quality: pick a healthy video bitrate per resolution (MediaRecorder's default
-  // is often too low). Because recordings now stream to disk, bigger is fine.
+  // Moderate, safe per-resolution video bitrate (default is often too low; too
+  // high can overload the real-time encoder and drop frames).
   const BITRATE: Record<string, number> = {
-    '480p': 1_500_000, '720p': 3_000_000, '1080p': 6_000_000, '2k': 12_000_000, '4k': 24_000_000,
+    '480p': 1_500_000, '720p': 2_500_000, '1080p': 5_000_000, '2k': 10_000_000, '4k': 16_000_000,
   };
-  const videoBitsPerSecond = BITRATE[options.resolution ?? '1080p'] ?? 6_000_000;
-
-  // Try to stream the recording to disk (IndexedDB via the background). If the
-  // handoff can't start, fall back to buffering in memory and transferring at
-  // the end.
-  rec.streaming = await sendRec({ action: 'recStart', transferId: rec.transferId });
+  const videoBitsPerSecond = BITRATE[options.resolution ?? '1080p'] ?? 5_000_000;
 
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
     audioBitsPerSecond: 128000,
     videoBitsPerSecond,
   });
+  // Buffer slices in memory during recording (proven, glitch-free for A/V); the
+  // finished blob is handed off in chunks at the end.
   rec.mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size === 0) return;
-    if (rec.streaming) {
-      // Stream to disk and free the chunk from memory — recording length is now
-      // bounded by disk, not RAM.
-      rec.pendingSends.push(streamChunk(rec.transferId, rec.seq++, e.data));
-    } else {
-      rec.chunks.push(e.data);
-    }
+    if (e.data.size > 0) rec.chunks.push(e.data);
   };
   rec.mediaRecorder.onerror = (e) => {
     console.error('[SnapMonk] MediaRecorder error:', e);
@@ -307,32 +294,14 @@ async function finalizeRecording() {
   const mimeType = rec.mimeType || getSupportedMimeType(rec.options?.format ?? 'mp4');
   const createdAt = Date.now();
   const duration = rec.startTime > 0 ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000 : 0;
-  const streaming = rec.streaming;
-  const transferId = rec.transferId;
-  const pending = rec.pendingSends.slice();
   const memChunks = rec.chunks.slice();
 
   releaseStreams();
   resetRecState();
 
-  if (streaming) {
-    try {
-      const results = await Promise.allSettled(pending);
-      if (results.some((r) => r.status === 'rejected')) throw new Error('a slice failed to save');
-      const done = await chrome.runtime.sendMessage({
-        action: 'recEnd', transferId, mimeType, createdAt, duration,
-      });
-      if (!done?.ok) throw new Error('finish rejected');
-    } catch {
-      // Disk handoff failed — abandon it and, if we still hold anything in
-      // memory, hand the file to the user directly rather than losing it.
-      chrome.runtime.sendMessage({ action: 'recAbort', transferId }).catch(() => {});
-      if (memChunks.length) directDownload(new Blob(memChunks, { type: mimeType }), mimeType);
-    }
-  } else {
-    // Fallback path: buffer was kept in memory; transfer it at the end.
-    await openPreviewPage(new Blob(memChunks, { type: mimeType }), mimeType, createdAt, duration);
-  }
+  // Hand the finished blob to the background in chunks (removes the IPC size cap;
+  // large recordings are bounded by memory). Falls back to a direct download.
+  await openPreviewPage(new Blob(memChunks, { type: mimeType }), mimeType, createdAt, duration);
 }
 
 // Fire a message to the background and report whether it acked ok.
@@ -343,16 +312,6 @@ async function sendRec(msg: unknown): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-// Stream one recorded slice to disk, retrying if the service worker was asleep.
-async function streamChunk(transferId: string, seq: number, data: Blob): Promise<void> {
-  const base64 = bytesToBase64(new Uint8Array(await data.arrayBuffer()));
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (await sendRec({ action: 'recChunk', transferId, seq, base64 })) return;
-    await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
-  }
-  throw new Error(`slice ${seq} failed to save`);
 }
 
 // Base64-encode a byte slice (strings survive Chrome's JSON-based IPC intact;
