@@ -176,7 +176,7 @@ async function initRecordingUI() {
 // ─── Mode selector ────────────────────────────────────────────────────────────
 
 let selectedMode: RecordingOptions['mode'] = 'tab';
-let selectedFormat: RecordingFormat = 'webm';
+let selectedFormat: RecordingFormat = 'mp4';
 let selectedResolution: RecordingResolution = '1080p';
 let countdownSeconds = 3;
 
@@ -203,6 +203,10 @@ function updateModeUI() {
 
 (document.getElementById('opt-resolution') as HTMLSelectElement)?.addEventListener('change', (e) => {
   selectedResolution = (e.target as HTMLSelectElement).value as RecordingResolution;
+});
+
+(document.getElementById('opt-format') as HTMLSelectElement)?.addEventListener('change', (e) => {
+  selectedFormat = (e.target as HTMLSelectElement).value as RecordingFormat;
 });
 
 // ─── Countdown spinner ────────────────────────────────────────────────────────

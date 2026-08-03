@@ -41,12 +41,19 @@ async function init() {
   recordingBlob = entry.blob;
   originalMimeType = entry.mimeType;
 
-  // Default the active button to match the native recorded format.
-  const isNativeMP4 = originalMimeType.startsWith('video/mp4');
-  selectedFormat = isNativeMP4 ? 'mp4' : 'webm';
+  // The download must match the ACTUAL recorded container, otherwise the file is
+  // mislabeled and won't play (e.g. a WebM named .mp4). Reflect the true format
+  // and disable the other button — pick the format up front in the popup instead.
+  const container = originalMimeType.includes('mp4') ? 'mp4' : 'webm';
+  selectedFormat = container;
   document.querySelectorAll('.pv-fmt-btn').forEach(b => {
     const btn = b as HTMLButtonElement;
-    btn.classList.toggle('active', btn.dataset['fmt'] === selectedFormat);
+    const match = btn.dataset['fmt'] === container;
+    btn.classList.toggle('active', match);
+    btn.disabled = !match;
+    btn.style.opacity = match ? '' : '0.4';
+    btn.style.cursor = match ? '' : 'not-allowed';
+    btn.title = match ? '' : `Recorded as ${container.toUpperCase()} — choose ${btn.dataset['fmt']!.toUpperCase()} in the popup before recording to export that format.`;
   });
 
   const url = URL.createObjectURL(recordingBlob);
@@ -128,7 +135,9 @@ downloadBtn.addEventListener('click', async () => {
   downloadBtn.textContent = 'Preparing…';
 
   try {
-    triggerDownload(recordingBlob, `snapmonk-recording-${Date.now()}.${selectedFormat}`);
+    // Always use the true container extension so the file is never mislabeled.
+    const ext = originalMimeType.includes('mp4') ? 'mp4' : 'webm';
+    triggerDownload(recordingBlob, `snapmonk-recording-${Date.now()}.${ext}`);
   } finally {
     downloadBtn.disabled = false;
     downloadBtn.innerHTML = `${DOWNLOAD_ICON} Download`;

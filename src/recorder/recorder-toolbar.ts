@@ -1,4 +1,4 @@
-import type { RecorderMessage, RecordingOptions } from '../utils/types';
+import type { RecorderMessage, RecordingOptions, RecordingFormat } from '../utils/types';
 
 // Guard: only inject once
 if (!(window as unknown as Record<string, boolean>)['__snapmonk_recorder__']) {
@@ -174,7 +174,7 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     ...mixDest.stream.getAudioTracks(),
   ]);
 
-  const mimeType = getSupportedMimeType();
+  const mimeType = getSupportedMimeType(options.format);
   rec.chunks = [];
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -230,7 +230,9 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  const mimeType = getSupportedMimeType();
+  // Match the container chosen at start (same input → same supported type),
+  // and prefer the actual recorded chunk type when available.
+  const mimeType = rec.chunks[0]?.type || getSupportedMimeType(rec.options?.format ?? 'mp4');
   const blob = new Blob(rec.chunks, { type: mimeType });
 
   releaseStreams();
@@ -501,15 +503,23 @@ function removeOverlays() {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function getSupportedMimeType(): string {
-  // VP9-in-WebM is Chrome's native recording codec — reliable across all systems.
-  // Avoid H264-in-WebM: it's non-standard and Chrome's encoder silently fails mid-recording.
-  // Avoid native MP4: it locks the download to .mp4 only.
-  const candidates = [
+function getSupportedMimeType(format: RecordingFormat): string {
+  // Record natively in the container the user chose so the file always plays and
+  // is never mislabeled. MP4 (H.264/AAC) plays everywhere incl. QuickTime/Windows
+  // and Chrome records real MP4 since v130; WebM (VP9/VP8) is Chrome's classic
+  // codec. Each list falls back to the other container if the browser can't do
+  // the preferred one.
+  const mp4 = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1,mp4a',
+    'video/mp4',
+  ];
+  const webm = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
   ];
+  const candidates = format === 'mp4' ? [...mp4, ...webm] : [...webm, ...mp4];
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 }
 
