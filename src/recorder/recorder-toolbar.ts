@@ -186,18 +186,21 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
   if (rec.micStream) audioSources.push(...rec.micStream.getAudioTracks());
 
   let audioTracks: MediaStreamTrack[] = [];
-  if (audioSources.length === 1) {
-    // Single source → use the track directly. Avoids the Web Audio graph entirely,
-    // which Chrome throttles/suspends when the recorder's tab is in the background
-    // (the usual cause of sound cutting out mid-recording).
-    audioTracks = audioSources;
-  } else if (audioSources.length > 1) {
-    // Multiple sources must be mixed into one track via an AudioContext. Resume it
-    // immediately (it can start suspended) and re-resume on any state change so it
-    // keeps producing audio even if the tab is backgrounded.
+  if (audioSources.length > 0) {
+    // ALWAYS route audio through an AudioContext — even a single mic. Feeding a
+    // raw capture track straight into MediaRecorder next to a separate video
+    // track lets the two capture clocks drift, and the muxer drops audio samples
+    // to resync → intermittent audio gaps (video stays fine). A MediaStreamDest
+    // gives one continuous, resampled 48 kHz audio track with a stable clock,
+    // which eliminates the drift. A GainNode sits in the graph so it always has
+    // an active, non-collectable path. Resume immediately + on any statechange so
+    // it never suspends.
     rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
     const mixDest = rec.audioCtx.createMediaStreamDestination();
-    rec.audioNodes = [mixDest]; // hold references so nodes aren't GC'd mid-recording
+    const gain = rec.audioCtx.createGain();
+    gain.gain.value = 1;
+    gain.connect(mixDest);
+    rec.audioNodes = [mixDest, gain]; // hold references so nodes aren't GC'd mid-recording
     rec.audioStreams = [];
     for (const track of audioSources) {
       // Keep the wrapper MediaStream referenced too — an unreferenced one can be
@@ -205,7 +208,7 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
       const wrap = new MediaStream([track]);
       rec.audioStreams.push(wrap);
       const src = rec.audioCtx.createMediaStreamSource(wrap);
-      src.connect(mixDest);
+      src.connect(gain);
       rec.audioNodes.push(src);
     }
     await rec.audioCtx.resume().catch(() => {});
