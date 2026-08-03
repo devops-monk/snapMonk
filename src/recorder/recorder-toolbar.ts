@@ -1,4 +1,4 @@
-import type { RecorderMessage, RecordingOptions, RecordingFormat } from '../utils/types';
+import type { RecorderMessage, RecordingOptions } from '../utils/types';
 
 // Guard: only inject once
 if (!(window as unknown as Record<string, boolean>)['__snapmonk_recorder__']) {
@@ -14,17 +14,7 @@ interface RecorderState {
   webcamStream: MediaStream | null;
   micStream: MediaStream | null;
   audioCtx: AudioContext | null;
-  // Keep references to the Web Audio nodes for the whole recording — an unreferenced
-  // MediaStreamAudioSourceNode can be garbage-collected mid-recording, silently
-  // cutting the mic/system audio.
-  audioNodes: AudioNode[];
-  audioStreams: MediaStream[];
   chunks: Blob[];
-  mimeType: string;
-  transferId: string;
-  seq: number;
-  pendingSends: Promise<void>[];
-  streaming: boolean;
   startTime: number;
   pausedAt: number;
   totalPausedMs: number;
@@ -39,14 +29,7 @@ const rec: RecorderState = {
   webcamStream: null,
   micStream: null,
   audioCtx: null,
-  audioNodes: [],
-  audioStreams: [],
   chunks: [],
-  mimeType: '',
-  transferId: '',
-  seq: 0,
-  pendingSends: [],
-  streaming: false,
   startTime: 0,
   pausedAt: 0,
   totalPausedMs: 0,
@@ -93,17 +76,8 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
 
   if (options.mic) {
     try {
-      // Capture the RAW mic. Chrome's default echoCancellation tries to subtract
-      // captured system audio from the mic and routinely over-cancels, dropping
-      // the user's own voice mid-sentence during screen+mic recording. Noise
-      // suppression / auto gain can gate speech too — turn them all off.
       const micConstraints: MediaStreamConstraints = {
-        audio: {
-          ...(options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
+        audio: options.micDeviceId ? { deviceId: { exact: options.micDeviceId } } : true,
         video: false,
       };
       rec.micStream = await navigator.mediaDevices.getUserMedia(micConstraints);
@@ -180,66 +154,32 @@ async function startRecording(options: RecordingOptions, passedStartTime?: numbe
     injectWebcamBubble(rec.webcamStream);
   }
 
-  // Gather the audio sources the user enabled.
-  const audioSources: MediaStreamTrack[] = [];
-  if (options.systemAudio !== false) audioSources.push(...rec.screenStream.getAudioTracks());
-  if (rec.micStream) audioSources.push(...rec.micStream.getAudioTracks());
+  // Mix all audio sources into a single track via AudioContext.
+  rec.audioCtx = new AudioContext({ latencyHint: 'playback', sampleRate: 48000 });
+  const mixDest = rec.audioCtx.createMediaStreamDestination();
 
-  let audioTracks: MediaStreamTrack[] = [];
-  if (audioSources.length === 1) {
-    // Single source (e.g. mic only) → use the live capture track directly. This
-    // GUARANTEES audio: a getUserMedia/display track is always active, whereas an
-    // AudioContext created mid-flow can start suspended (no user gesture) and
-    // record silence.
-    audioTracks = audioSources;
-  } else if (audioSources.length > 1) {
-    // 2+ sources (system + mic) must be mixed into one track. Use an AudioContext,
-    // resume it, and if it can't run, fall back to the mic track alone so we still
-    // capture *some* audio rather than silence.
-    rec.audioCtx = new AudioContext({ sampleRate: 48000 });
-    const mixDest = rec.audioCtx.createMediaStreamDestination();
-    rec.audioNodes = [mixDest];
-    rec.audioStreams = [];
-    for (const track of audioSources) {
-      const wrap = new MediaStream([track]);
-      rec.audioStreams.push(wrap);
-      const src = rec.audioCtx.createMediaStreamSource(wrap);
-      src.connect(mixDest);
-      rec.audioNodes.push(src);
+  if (options.systemAudio !== false) {
+    for (const track of rec.screenStream.getAudioTracks()) {
+      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
     }
-    await rec.audioCtx.resume().catch(() => {});
-    rec.audioCtx.addEventListener('statechange', () => {
-      if (rec.audioCtx?.state === 'suspended') rec.audioCtx.resume().catch(() => {});
-    });
-    // If the context wouldn't start, its output is silent — fall back to the mic.
-    audioTracks = rec.audioCtx.state === 'running'
-      ? mixDest.stream.getAudioTracks()
-      : (rec.micStream?.getAudioTracks() ?? audioSources);
+  }
+  if (rec.micStream) {
+    for (const track of rec.micStream.getAudioTracks()) {
+      rec.audioCtx.createMediaStreamSource(new MediaStream([track])).connect(mixDest);
+    }
   }
 
   const combinedStream = new MediaStream([
     ...rec.screenStream.getVideoTracks(),
-    ...audioTracks,
+    ...mixDest.stream.getAudioTracks(),
   ]);
 
-  const mimeType = getSupportedMimeType(options.format);
-  rec.mimeType = mimeType;
+  const mimeType = getSupportedMimeType();
   rec.chunks = [];
-
-  // Moderate, safe per-resolution video bitrate (default is often too low; too
-  // high can overload the real-time encoder and drop frames).
-  const BITRATE: Record<string, number> = {
-    '480p': 1_500_000, '720p': 2_500_000, '1080p': 5_000_000, '2k': 10_000_000, '4k': 16_000_000,
-  };
-  const videoBitsPerSecond = BITRATE[options.resolution ?? '1080p'] ?? 5_000_000;
-
   rec.mediaRecorder = new MediaRecorder(combinedStream, {
     mimeType,
     audioBitsPerSecond: 128000,
-    videoBitsPerSecond,
   });
-  // Buffer slices in memory during recording (proven, glitch-free for A/V); the
-  // finished blob is handed off in chunks at the end.
   rec.mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) rec.chunks.push(e.data);
   };
@@ -290,73 +230,39 @@ function notifyBackground(action: string) {
 }
 
 async function finalizeRecording() {
-  const mimeType = rec.mimeType || getSupportedMimeType(rec.options?.format ?? 'mp4');
-  const createdAt = Date.now();
-  const duration = rec.startTime > 0 ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000 : 0;
-  const memChunks = rec.chunks.slice();
+  const mimeType = getSupportedMimeType();
+  const blob = new Blob(rec.chunks, { type: mimeType });
 
   releaseStreams();
   resetRecState();
 
-  // Hand the finished blob to the background in chunks (removes the IPC size cap;
-  // large recordings are bounded by memory). Falls back to a direct download.
-  await openPreviewPage(new Blob(memChunks, { type: mimeType }), mimeType, createdAt, duration);
+  // openPreviewPage sends the recording to the background, which stores it in
+  // the extension's IndexedDB and opens the preview tab. It also clears the
+  // recording state (replaces the separate recordingStopped notification).
+  await openPreviewPage(blob, mimeType);
 }
 
-// Fire a message to the background and report whether it acked ok.
-async function sendRec(msg: unknown): Promise<boolean> {
-  try {
-    const res = await chrome.runtime.sendMessage(msg);
-    return !!(res as { ok?: boolean } | undefined)?.ok;
-  } catch {
-    return false;
-  }
-}
-
-// Base64-encode a byte slice (strings survive Chrome's JSON-based IPC intact;
-// raw TypedArrays get mangled into plain objects on the receiving end).
-function bytesToBase64(bytes: Uint8Array): string {
+async function openPreviewPage(blob: Blob, mimeType: string) {
+  const durationSecs = rec.startTime > 0
+    ? (Date.now() - rec.startTime - rec.totalPausedMs) / 1000
+    : 0;
+  const arrayBuffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  // Base64-encode in chunks — strings survive Chrome's extension IPC (JSON-based)
+  // intact; raw TypedArrays get mangled into plain objects on the receiving end.
   let binary = '';
-  const SUB = 8192;
-  for (let i = 0; i < bytes.length; i += SUB) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + SUB));
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
-  return btoa(binary);
-}
-
-// Fallback: if the handoff to the background fails, hand the file straight to the
-// user so a recording is never silently lost.
-function directDownload(blob: Blob, mimeType: string) {
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `snapmonk-recording-${Date.now()}.${ext}`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 15000);
-}
-
-// Fallback handoff (used when streaming-to-disk couldn't start): buffer the whole
-// blob and transfer it in slices at the end.
-async function openPreviewPage(blob: Blob, mimeType: string, createdAt: number, duration: number) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  const transferId = `rec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const CHUNK = 3 * 512 * 1024; // 1.5 MB per slice — clean base64 boundary, ~2 MB/message
-
-  try {
-    if (!(await sendRec({ action: 'recStart', transferId }))) throw new Error('start rejected');
-    for (let i = 0, seq = 0; i < bytes.length; i += CHUNK, seq++) {
-      if (!(await sendRec({ action: 'recChunk', transferId, seq, base64: bytesToBase64(bytes.subarray(i, i + CHUNK)) }))) {
-        throw new Error('chunk rejected');
-      }
-    }
-    if (!(await sendRec({ action: 'recEnd', transferId, mimeType, createdAt, duration }))) {
-      throw new Error('finish rejected');
-    }
-  } catch {
-    directDownload(blob, mimeType);
-    chrome.runtime.sendMessage({ action: 'recAbort', transferId }).catch(() => {});
-  }
+  const base64 = btoa(binary);
+  chrome.runtime.sendMessage({
+    action: 'saveRecording',
+    base64,
+    mimeType,
+    createdAt: Date.now(),
+    duration: durationSecs,
+  }).catch(() => {});
 }
 
 
@@ -365,15 +271,8 @@ function resetRecState() {
   rec.screenStream = null;
   rec.webcamStream = null;
   rec.micStream = null;
-  rec.audioNodes.forEach((n) => n.disconnect());
-  rec.audioNodes = [];
-  rec.audioStreams = [];
-  rec.audioCtx?.close().catch(() => {});
   rec.audioCtx = null;
   rec.chunks = [];
-  rec.pendingSends = [];
-  rec.seq = 0;
-  rec.streaming = false;
 }
 
 // ─── Toolbar Overlay ──────────────────────────────────────────────────────────
@@ -461,8 +360,6 @@ function togglePause() {
 
   if (rec.isPaused) {
     rec.mediaRecorder.resume();
-    // The audio mixer can suspend while paused/backgrounded — wake it back up.
-    if (rec.audioCtx?.state === 'suspended') rec.audioCtx.resume().catch(() => {});
     rec.isPaused = false;
     // Accumulate the time we were paused so elapsed time stays accurate
     if (rec.pausedAt > 0) {
@@ -604,23 +501,15 @@ function removeOverlays() {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function getSupportedMimeType(format: RecordingFormat): string {
-  // Record natively in the container the user chose so the file always plays and
-  // is never mislabeled. MP4 (H.264/AAC) plays everywhere incl. QuickTime/Windows
-  // and Chrome records real MP4 since v130; WebM (VP9/VP8) is Chrome's classic
-  // codec. Each list falls back to the other container if the browser can't do
-  // the preferred one.
-  const mp4 = [
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-    'video/mp4;codecs=avc1,mp4a',
-    'video/mp4',
-  ];
-  const webm = [
+function getSupportedMimeType(): string {
+  // VP9-in-WebM is Chrome's native recording codec — reliable across all systems.
+  // Avoid H264-in-WebM: it's non-standard and Chrome's encoder silently fails mid-recording.
+  // Avoid native MP4: it locks the download to .mp4 only.
+  const candidates = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
   ];
-  const candidates = format === 'mp4' ? [...mp4, ...webm] : [...webm, ...mp4];
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
 }
 
